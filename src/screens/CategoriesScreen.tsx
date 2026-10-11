@@ -93,8 +93,11 @@ export function CategoriesScreen({ state }: { state: KeepItState }) {
             <button type="button" className="ghost crumb" onClick={() => setOpenCategory(null)}>
               ← Все категории
             </button>
-            <div className="list-item catalog-row">
-              <strong className="grow">{node.name}</strong>
+            <div className="list-item catalog-row catalog-category">
+              <div className="grow catalog-category-text">
+                <span className="muted catalog-category-label">Категория</span>
+                <strong>{node.name}</strong>
+              </div>
               <button
                 type="button"
                 className="icon-btn"
@@ -114,7 +117,7 @@ export function CategoriesScreen({ state }: { state: KeepItState }) {
                 ×
               </button>
             </div>
-            <strong>Подкатегории</strong>
+            <strong className="catalog-subhead">Подкатегории</strong>
             <div className="list">
               {node.children.length === 0 ? (
                 <p className="muted">Подкатегорий пока нет</p>

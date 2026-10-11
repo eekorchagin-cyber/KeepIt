@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { objectLabelFromPlaces } from '../data/icons'
+import { readFileAsText } from '../data/backup'
 
 export function MoreScreen({ state }: { state: KeepItState }) {
   const active = state.settings?.activeObject ?? 'dacha'
@@ -34,25 +35,41 @@ export function MoreScreen({ state }: { state: KeepItState }) {
 
   async function onImportFile(file: File | undefined) {
     if (!file) return
+
+    // Важно: читаем файл ДО confirm — иначе на iOS содержимое часто уже пустое.
+    let text: string
+    try {
+      text = await readFileAsText(file)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось прочитать файл')
+      if (fileRef.current) fileRef.current.value = ''
+      return
+    } finally {
+      if (fileRef.current) fileRef.current.value = ''
+    }
+
     if (
       !confirm(
         'Импорт заменит все данные на этом устройстве содержимым файла. Продолжить?',
       )
     ) {
-      if (fileRef.current) fileRef.current.value = ''
       return
     }
+
     setBusy(true)
     setError(null)
     setMessage(null)
     try {
-      await state.importData(file)
-      setMessage('Данные импортированы')
+      const summary = await state.importData(text)
+      const when = summary.exportedAt ? ` от ${summary.exportedAt.slice(0, 10)}` : ''
+      const done = `Импортировано${when}: ${summary.places} мест, ${summary.items} вещей`
+      setMessage(done)
+      window.alert(done)
+      state.jump({ name: 'home' })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось импортировать')
     } finally {
       setBusy(false)
-      if (fileRef.current) fileRef.current.value = ''
     }
   }
 
@@ -105,8 +122,8 @@ export function MoreScreen({ state }: { state: KeepItState }) {
       <div className="panel stack">
         <strong>Обмен данными</strong>
         <p className="muted">
-          Экспортируйте файл на одном устройстве и импортируйте на другом (например, через файлы,
-          AirDrop или мессенджер).
+          Экспорт на одном устройстве → передайте файл → импорт на другом. Импортируйте в том же
+          браузере, где пользуетесь KeepIt (не в превью мессенджера).
         </p>
         <button type="button" className="list-item" disabled={busy} onClick={() => void onExport()}>
           <span>
@@ -124,7 +141,7 @@ export function MoreScreen({ state }: { state: KeepItState }) {
           ref={fileRef}
           className="file-input-hidden"
           type="file"
-          accept="application/json,.json"
+          accept=".json,application/json,text/plain,text/*"
           onChange={(event) => void onImportFile(event.target.files?.[0])}
         />
         {message ? <p className="muted">{message}</p> : null}

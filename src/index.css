@@ -618,17 +618,6 @@ html[data-theme='dark'] .icon-btn:disabled {
   border: 0;
 }
 
-.catalog-row {
-  cursor: default;
-  grid-template-columns: 1fr auto auto;
-}
-
-.catalog-row .icon-btn {
-  width: 40px;
-  min-height: 40px;
-  flex-shrink: 0;
-}
-
 .lent-banner {
   margin: 6px 0 2px;
   padding: 10px 12px;
@@ -780,6 +769,44 @@ html[data-theme='dark'] .icon-btn:disabled {
   border: 1px solid var(--line);
   padding: 10px 12px;
   overflow: hidden;
+}
+
+.list-item.catalog-row {
+  cursor: default;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.list-item.catalog-row .icon-btn {
+  width: 40px;
+  min-height: 40px;
+}
+
+.list-item.catalog-category {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated));
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.catalog-category-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.catalog-category-text strong {
+  font-size: 1.15em;
+  line-height: 1.25;
+}
+
+.catalog-category-label {
+  font-size: 0.78em;
+  letter-spacing: 0.02em;
+}
+
+.catalog-subhead {
+  display: block;
+  margin-top: 6px;
 }
 
 .list-item.move-item {

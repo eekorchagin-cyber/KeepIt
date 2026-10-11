@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { exportBackup, importBackupFromFile } from '../data/backup'
+import {
+  exportBackup,
+  importBackupFromText,
+  type ImportSummary,
+} from '../data/backup'
 import {
   addCategory,
   addItem,
@@ -148,8 +152,8 @@ export type KeepItState = {
   lentItems: () => Item[]
   /** Скачать/поделиться JSON-резервной копией */
   exportData: () => Promise<void>
-  /** Заменить локальные данные содержимым файла бэкапа */
-  importData: (file: File) => Promise<void>
+  /** Заменить локальные данные текстом JSON-бэкапа (уже прочитанным из файла) */
+  importData: (text: string) => Promise<ImportSummary>
 }
 
 function applyTheme(theme: ThemeMode, fontScale: number) {
@@ -405,10 +409,10 @@ export function useKeepIt(): KeepItState {
     exportData: async () => {
       await exportBackup()
     },
-    importData: async (file) => {
-      await importBackupFromFile(file)
+    importData: async (text) => {
+      const summary = await importBackupFromText(text)
       await refresh()
-      jump({ name: 'more' })
+      return summary
     },
   }
 }

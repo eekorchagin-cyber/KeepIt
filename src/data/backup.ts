@@ -15,6 +15,13 @@ export type KeepItBackup = {
   moves: StockMove[]
 }
 
+export type ImportSummary = {
+  exportedAt: string
+  places: number
+  items: number
+  moves: number
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -87,26 +94,61 @@ export function parseBackup(raw: unknown): KeepItBackup {
   }
 }
 
-export async function parseBackupText(text: string): Promise<KeepItBackup> {
+export function parseBackupText(text: string): KeepItBackup {
+  const trimmed = text.replace(/^\uFEFF/, '').trim()
+  if (!trimmed) throw new Error('Файл пустой — выберите JSON-копию KeepIt ещё раз')
   let raw: unknown
   try {
-    raw = JSON.parse(text) as unknown
+    raw = JSON.parse(trimmed) as unknown
   } catch {
     throw new Error('Не удалось прочитать файл (ожидается JSON)')
   }
   return parseBackup(raw)
 }
 
+/** Чтение файла до любых диалогов (иначе на iOS File часто становится пустым). */
+export function readFileAsText(file: File): Promise<string> {
+  if (typeof file.text === 'function') {
+    return file.text()
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onerror = () => reject(new Error('Не удалось прочитать файл'))
+    reader.readAsText(file)
+  })
+}
+
 /** Полностью заменяет локальные данные содержимым бэкапа. */
-export async function importBackup(backup: KeepItBackup): Promise<void> {
+export async function importBackup(backup: KeepItBackup): Promise<ImportSummary> {
   const data = parseBackup(backup)
   await db.transaction('rw', db.settings, db.places, db.items, db.moves, async () => {
-    await Promise.all([db.settings.clear(), db.places.clear(), db.items.clear(), db.moves.clear()])
+    await db.settings.clear()
+    await db.places.clear()
+    await db.items.clear()
+    await db.moves.clear()
     await db.settings.put(data.settings)
     if (data.places.length) await db.places.bulkPut(data.places)
     if (data.items.length) await db.items.bulkPut(data.items)
     if (data.moves.length) await db.moves.bulkPut(data.moves)
   })
+
+  // Проверка, что запись реально попала в IndexedDB (на части WebView иначе тихий сбой).
+  const [settings, placeCount, itemCount] = await Promise.all([
+    db.settings.get('settings'),
+    db.places.count(),
+    db.items.count(),
+  ])
+  if (!settings || placeCount !== data.places.length || itemCount !== data.items.length) {
+    throw new Error('Импорт не сохранился в память браузера. Попробуйте ещё раз в Safari/Chrome.')
+  }
+
+  return {
+    exportedAt: data.exportedAt,
+    places: data.places.length,
+    items: data.items.length,
+    moves: data.moves.length,
+  }
 }
 
 export function backupFilename(exportedAt = nowIso()): string {
@@ -114,19 +156,26 @@ export function backupFilename(exportedAt = nowIso()): string {
   return `keepit-backup-${stamp || 'export'}.json`
 }
 
-/** Скачивает JSON (и при возможности предлагает системный Share). */
+/** Скачивает JSON. Share на мобильных — дополнительно, не вместо скачивания при отмене. */
 export async function downloadBackup(backup: KeepItBackup): Promise<void> {
   const text = `${JSON.stringify(backup, null, 2)}\n`
   const blob = new Blob([text], { type: 'application/json' })
   const filename = backupFilename(backup.exportedAt)
   const file = new File([blob], filename, { type: 'application/json' })
 
-  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
+  const canShareFiles =
+    typeof navigator !== 'undefined' &&
+    typeof navigator.share === 'function' &&
+    typeof navigator.canShare === 'function' &&
+    navigator.canShare({ files: [file] })
+
+  if (canShareFiles) {
     try {
-      await navigator.share({ files: [file], title: 'KeepIt' })
+      await navigator.share({ files: [file], title: 'KeepIt', text: filename })
       return
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return
+      // иначе падаем на обычное скачивание
     }
   }
 
@@ -140,7 +189,7 @@ export async function downloadBackup(backup: KeepItBackup): Promise<void> {
     anchor.click()
     anchor.remove()
   } finally {
-    URL.revokeObjectURL(url)
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 }
 
@@ -150,8 +199,12 @@ export async function exportBackup(): Promise<KeepItBackup> {
   return backup
 }
 
-export async function importBackupFromFile(file: File): Promise<void> {
-  const text = await file.text()
-  const backup = await parseBackupText(text)
-  await importBackup(backup)
+export async function importBackupFromText(text: string): Promise<ImportSummary> {
+  const backup = parseBackupText(text)
+  return importBackup(backup)
+}
+
+export async function importBackupFromFile(file: File): Promise<ImportSummary> {
+  const text = await readFileAsText(file)
+  return importBackupFromText(text)
 }
