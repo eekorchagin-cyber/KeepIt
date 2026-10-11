@@ -1,0 +1,359 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  addItem,
+  addPlace,
+  addRootObject,
+  createFreePlaces,
+  deletePlace,
+  getSettings,
+  listItems,
+  listPlaces,
+  isItemLent,
+  lendItem,
+  moveItem,
+  movePlace,
+  placePath,
+  renamePlace,
+  returnLentItem,
+  updateItem,
+  updateItemQuantity,
+  updateRootAppearance,
+  updateSettings,
+} from '../data/repository'
+import type { ObjectIconId } from '../data/icons'
+import type {
+  AccountingMode,
+  AppSettings,
+  Item,
+  ObjectKey,
+  Place,
+  PlaceType,
+  Screen,
+  ThemeMode,
+  UnitCode,
+} from '../types'
+
+function sameScreen(a: Screen, b: Screen): boolean {
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
+function fallbackParent(screen: Screen, places: Place[]): Screen {
+  switch (screen.name) {
+    case 'home':
+      return { name: 'home' }
+    case 'object':
+      return { name: 'home' }
+    case 'place': {
+      const place = places.find((entry) => entry.id === screen.placeId)
+      if (!place) return { name: 'home' }
+      if (place.parentId) return { name: 'place', placeId: place.parentId }
+      return { name: 'object', objectKey: place.objectKey }
+    }
+    case 'add-item':
+      return { name: 'place', placeId: screen.placeId }
+    case 'item':
+      return { name: 'home' }
+    case 'edit-item':
+      return { name: 'item', itemId: screen.itemId }
+    case 'settings':
+    case 'print':
+    case 'lent':
+      return { name: 'more' }
+    case 'scan':
+    case 'search':
+    case 'more':
+      return { name: 'home' }
+  }
+}
+
+export type KeepItState = {
+  loading: boolean
+  settings: AppSettings | null
+  places: Place[]
+  items: Item[]
+  screen: Screen
+  error: string | null
+  canGoBack: boolean
+  refresh: () => Promise<void>
+  navigate: (screen: Screen) => void
+  jump: (screen: Screen) => void
+  goBack: () => void
+  setScreen: (screen: Screen) => void
+  setActiveObject: (objectKey: ObjectKey) => Promise<void>
+  setTheme: (theme: ThemeMode) => Promise<void>
+  createChildPlace: (parentId: string, name: string, type: PlaceType) => Promise<Place>
+  createRootObject: (input: {
+    name: string
+    iconId?: ObjectIconId
+    iconBg?: string
+  }) => Promise<Place>
+  updateRootLook: (
+    placeId: string,
+    patch: { iconId?: ObjectIconId; iconBg?: string; name?: string },
+  ) => Promise<Place>
+  renameCurrentPlace: (placeId: string, name: string) => Promise<Place>
+  relocatePlace: (placeId: string, parentId: string) => Promise<Place>
+  removePlace: (placeId: string) => Promise<void>
+  createItem: (input: {
+    placeId: string
+    name: string
+    mode: AccountingMode
+    category: string
+    unit: UnitCode
+    quantity: number
+    note?: string
+  }) => Promise<Item>
+  changeQuantity: (itemId: string, quantity: number, kind: 'in' | 'out' | 'adjust', note?: string) => Promise<void>
+  updateItemCard: (itemId: string, patch: {
+    name: string
+    mode: AccountingMode
+    category: string
+    subcategory?: string
+    unit: UnitCode
+    quantity: number
+    note?: string
+    needsFill?: boolean
+  }) => Promise<Item>
+  relocateItem: (itemId: string, placeId: string) => Promise<Item>
+  lendOutItem: (itemId: string, lentTo: string, lentAt: string) => Promise<Item>
+  returnFromLend: (itemId: string) => Promise<Item>
+  makeFreeLabels: (parentId: string, count: number) => Promise<Place[]>
+  pathFor: (placeId: string) => Place[]
+  findPlace: (id: string) => Place | undefined
+  findItem: (id: string) => Item | undefined
+  childPlaces: (placeId: string) => Place[]
+  itemsInPlace: (placeId: string) => Item[]
+  /** Сумма количеств вещей в месте и всех вложенных местах */
+  stockInSubtree: (placeId: string) => { total: number; unit: UnitCode | null; itemCount: number }
+  searchItems: (query: string) => Item[]
+  /** Все переданные на время вещи (по всем объектам) */
+  lentItems: () => Item[]
+}
+
+function applyTheme(theme: ThemeMode, fontScale: number) {
+  const dark =
+    theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+  document.documentElement.style.setProperty('--font-scale', String(fontScale))
+}
+
+export function useKeepIt(): KeepItState {
+  const [loading, setLoading] = useState(true)
+  const [settings, setSettings] = useState<AppSettings | null>(null)
+  const [places, setPlaces] = useState<Place[]>([])
+  const [items, setItems] = useState<Item[]>([])
+  const [screen, setScreenState] = useState<Screen>({ name: 'home' })
+  const [history, setHistory] = useState<Screen[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const screenRef = useRef(screen)
+  const historyRef = useRef(history)
+  screenRef.current = screen
+  historyRef.current = history
+
+  const refresh = useCallback(async () => {
+    const nextSettings = await getSettings()
+    const nextPlaces = await listPlaces()
+    const nextItems = await listItems()
+    setSettings(nextSettings)
+    setPlaces(nextPlaces)
+    setItems(nextItems)
+    applyTheme(nextSettings.theme, nextSettings.fontScale)
+  }, [])
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        await refresh()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Ошибка загрузки')
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [refresh])
+
+  useEffect(() => {
+    const onHash = () => {
+      const hash = location.hash.replace(/^#/, '')
+      const match = hash.match(/^\/place\/([0-9a-f-]{36})$/i)
+      if (match?.[1]) {
+        setHistory([])
+        setScreenState({ name: 'place', placeId: match[1] })
+      }
+    }
+    onHash()
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+
+  const visibleItems = useMemo(() => {
+    const objectKey = settings?.activeObject
+    if (!objectKey) return items
+    const placeIds = new Set(places.filter((place) => place.objectKey === objectKey).map((place) => place.id))
+    return items.filter((item) => placeIds.has(item.placeId))
+  }, [items, places, settings?.activeObject])
+
+  const lentList = useMemo(
+    () =>
+      items
+        .filter(isItemLent)
+        .sort(
+          (a, b) =>
+            (b.lentAt || '').localeCompare(a.lentAt || '') || a.name.localeCompare(b.name, 'ru'),
+        ),
+    [items],
+  )
+
+  const navigate = useCallback((next: Screen) => {
+    const current = screenRef.current
+    if (sameScreen(current, next)) return
+    setHistory((prev) => [...prev, current])
+    setScreenState(next)
+  }, [])
+
+  const jump = useCallback((next: Screen) => {
+    setHistory([])
+    setScreenState(next)
+  }, [])
+
+  const goBack = useCallback(() => {
+    const prev = historyRef.current
+    if (prev.length > 0) {
+      const target = prev[prev.length - 1]!
+      setHistory(prev.slice(0, -1))
+      setScreenState(target)
+      return
+    }
+    const current = screenRef.current
+    if (current.name === 'item') {
+      const item = items.find((entry) => entry.id === current.itemId)
+      if (item) {
+        setScreenState({ name: 'place', placeId: item.placeId })
+        return
+      }
+    }
+    setScreenState(fallbackParent(current, places))
+  }, [items, places])
+
+  const canGoBack = history.length > 0 || screen.name !== 'home'
+
+  return {
+    loading,
+    settings,
+    places,
+    items: visibleItems,
+    screen,
+    error,
+    canGoBack,
+    refresh,
+    navigate,
+    jump,
+    goBack,
+    setScreen: navigate,
+    setActiveObject: async (objectKey) => {
+      await updateSettings({ activeObject: objectKey })
+      await refresh()
+    },
+    setTheme: async (theme) => {
+      const next = await updateSettings({ theme })
+      applyTheme(next.theme, next.fontScale)
+      setSettings(next)
+    },
+    createChildPlace: async (parentId, name, type) => {
+      const place = await addPlace({ parentId, name, type })
+      await refresh()
+      return place
+    },
+    createRootObject: async (input) => {
+      const place = await addRootObject(input)
+      await refresh()
+      return place
+    },
+    updateRootLook: async (placeId, patch) => {
+      const place = await updateRootAppearance(placeId, patch)
+      await refresh()
+      return place
+    },
+    renameCurrentPlace: async (placeId, name) => {
+      const place = await renamePlace(placeId, name)
+      await refresh()
+      return place
+    },
+    relocatePlace: async (placeId, parentId) => {
+      const moved = await movePlace(placeId, parentId)
+      await refresh()
+      return moved
+    },
+    removePlace: async (placeId) => {
+      await deletePlace(placeId)
+      await refresh()
+    },
+    createItem: async (input) => {
+      const item = await addItem(input)
+      await refresh()
+      return item
+    },
+    changeQuantity: async (itemId, quantity, kind, note) => {
+      await updateItemQuantity(itemId, quantity, kind, note)
+      await refresh()
+    },
+    updateItemCard: async (itemId, patch) => {
+      const next = await updateItem(itemId, patch)
+      await refresh()
+      return next
+    },
+    relocateItem: async (itemId, placeId) => {
+      const moved = await moveItem(itemId, placeId)
+      await refresh()
+      return moved
+    },
+    lendOutItem: async (itemId, lentTo, lentAt) => {
+      const next = await lendItem(itemId, lentTo, lentAt)
+      await refresh()
+      return next
+    },
+    returnFromLend: async (itemId) => {
+      const next = await returnLentItem(itemId)
+      await refresh()
+      return next
+    },
+    makeFreeLabels: async (parentId, count) => {
+      const created = await createFreePlaces(parentId, count)
+      await refresh()
+      return created
+    },
+    pathFor: (placeId) => placePath(placeId, places),
+    findPlace: (id) => places.find((place) => place.id === id) ?? undefined,
+    findItem: (id) => items.find((item) => item.id === id),
+    childPlaces: (placeId) =>
+      places.filter((place) => place.parentId === placeId).sort((a, b) => a.name.localeCompare(b.name, 'ru')),
+    itemsInPlace: (placeId) => visibleItems.filter((item) => item.placeId === placeId),
+    stockInSubtree: (placeId) => {
+      const placeIds = new Set<string>()
+      const visit = (id: string) => {
+        placeIds.add(id)
+        for (const child of places.filter((place) => place.parentId === id)) {
+          visit(child.id)
+        }
+      }
+      visit(placeId)
+      // Заготовки «требует заполнения» не участвуют в остатках
+      const nested = visibleItems.filter((item) => placeIds.has(item.placeId) && !item.needsFill)
+      const total = nested.reduce((sum, item) => sum + item.quantity, 0)
+      const units = new Set(nested.map((item) => item.unit))
+      return {
+        total,
+        unit: units.size === 1 ? (nested[0]?.unit ?? null) : null,
+        itemCount: nested.length,
+      }
+    },
+    searchItems: (query) => {
+      const q = query.trim().toLowerCase().replaceAll('ё', 'е')
+      if (!q) return visibleItems
+      return visibleItems.filter((item) =>
+        [item.name, item.category, item.subcategory, item.note].join(' ').toLowerCase().replaceAll('ё', 'е').includes(q),
+      )
+    },
+    lentItems: () => lentList,
+  }
+}

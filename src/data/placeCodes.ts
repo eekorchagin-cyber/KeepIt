@@ -1,0 +1,83 @@
+import type { Place } from '../types'
+
+/** Читаемый код места — полный путь по иерархии. */
+export function formatPlacePathCode(parts: string[]): string {
+  return parts
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(' / ')
+}
+
+export function normalizePlaceCode(code: string): string {
+  return code
+    .trim()
+    .toLowerCase()
+    .replaceAll('ё', 'е')
+    .replace(/\s*\/\s*/g, '/')
+    .replace(/\s+/g, ' ')
+}
+
+export function placePathNames(placeId: string, places: Place[]): string[] {
+  const map = new Map(places.map((place) => [place.id, place]))
+  const names: string[] = []
+  let current = map.get(placeId)
+  while (current) {
+    names.unshift(current.name)
+    current = current.parentId ? map.get(current.parentId) : undefined
+  }
+  return names
+}
+
+export function codeForPlace(placeId: string, places: Place[]): string {
+  return formatPlacePathCode(placePathNames(placeId, places))
+}
+
+export function recomputePlaceCodes(places: Place[]): Place[] {
+  return places.map((place) => ({
+    ...place,
+    code: codeForPlace(place.id, places),
+  }))
+}
+
+export function placeUrl(placeId: string): string {
+  const base =
+    typeof location !== 'undefined'
+      ? `${location.origin}${location.pathname.replace(/\/$/, '')}`
+      : ''
+  return `${base}#/place/${placeId}`
+}
+
+export function parsePlaceFromScan(raw: string, places: Place[]): Place | null {
+  const value = raw.trim()
+  if (!value) return null
+
+  try {
+    const url = new URL(value)
+    const hash = url.hash.replace(/^#/, '')
+    const match = hash.match(/\/place\/([0-9a-f-]{36})/i)
+    if (match?.[1]) {
+      return places.find((place) => place.id === match[1]) ?? null
+    }
+  } catch {
+    /* not a URL */
+  }
+
+  const hashMatch = value.match(/#\/place\/([0-9a-f-]{36})/i)
+  if (hashMatch?.[1]) {
+    return places.find((place) => place.id === hashMatch[1]) ?? null
+  }
+
+  const uuidMatch = value.match(
+    /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+  )
+  if (uuidMatch?.[0]) {
+    return places.find((place) => place.id === uuidMatch[0]) ?? null
+  }
+
+  const code = normalizePlaceCode(value)
+  return places.find((place) => normalizePlaceCode(place.code) === code) ?? null
+}
+
+export function looksLikeLegacyShortCode(code: string): boolean {
+  return /^M-[A-Z0-9]{5}$/i.test(code.trim())
+}
