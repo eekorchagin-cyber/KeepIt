@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { MoveItemSheet, MovePlaceSheet } from './MoveItemSheet'
 import { ObjectAppearanceSheet, appearanceFromPlace } from './ObjectAppearanceSheet'
 import { helpForScreen } from '../data/help'
-import { objectLabelFromPlaces } from '../data/icons'
+import { defaultObjectAppearance, objectLabelFromPlaces } from '../data/icons'
 import { movesWithContents } from '../data/repository'
 import type { KeepItState } from '../hooks/useKeepIt'
 import type { PlaceType } from '../types'
@@ -31,6 +31,7 @@ function titleFor(state: KeepItState): string {
   if (screen.name === 'search') return 'Поиск'
   if (screen.name === 'print') return 'Метки'
   if (screen.name === 'lent') return 'Передано'
+  if (screen.name === 'categories') return 'Категории'
   if (screen.name === 'settings') return 'Настройки'
   if (screen.name === 'more') return 'Ещё'
   return 'KeepIt'
@@ -46,6 +47,7 @@ type Sheet =
   | 'move-place'
   | 'delete-place'
   | 'object-look'
+  | 'add-object'
   | null
 
 export function TopBar({ state }: { state: KeepItState }) {
@@ -59,7 +61,9 @@ export function TopBar({ state }: { state: KeepItState }) {
 
   const help = helpForScreen(state.screen)
   const title = titleFor(state)
-  const addEnabled = state.screen.name === 'object' || state.screen.name === 'place'
+  const addEnabled =
+    state.screen.name === 'home' || state.screen.name === 'object' || state.screen.name === 'place'
+  const newObjectDefaults = defaultObjectAppearance('custom')
   const objectScreen = state.screen.name === 'object' ? state.screen : null
   const objectRoot = objectScreen
     ? state.places.find(
@@ -104,6 +108,10 @@ export function TopBar({ state }: { state: KeepItState }) {
   }
 
   function onAdd() {
+    if (state.screen.name === 'home') {
+      openSheet('add-object')
+      return
+    }
     if (state.screen.name === 'object') {
       setPlaceName('')
       setPlaceType('room')
@@ -232,6 +240,29 @@ export function TopBar({ state }: { state: KeepItState }) {
             try {
               await state.updateRootLook(objectRoot.id, { name, iconId, iconBg })
               closeSheet()
+            } finally {
+              setBusy(false)
+            }
+          }}
+        />
+      ) : null}
+
+      {sheet === 'add-object' && state.screen.name === 'home' ? (
+        <ObjectAppearanceSheet
+          title="Новый объект"
+          initialName=""
+          initialIconId={newObjectDefaults.iconId}
+          initialIconBg={newObjectDefaults.iconBg}
+          confirmLabel="Создать"
+          busy={busy}
+          onClose={closeSheet}
+          onSave={async ({ name, iconId, iconBg }) => {
+            setBusy(true)
+            try {
+              const created = await state.createRootObject({ name, iconId, iconBg })
+              closeSheet()
+              await state.setActiveObject(created.objectKey)
+              state.navigate({ name: 'object', objectKey: created.objectKey })
             } finally {
               setBusy(false)
             }

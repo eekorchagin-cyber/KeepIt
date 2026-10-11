@@ -31,6 +31,7 @@ export type Screen =
   | { name: 'search' }
   | { name: 'print'; placeId?: string }
   | { name: 'lent' }
+  | { name: 'categories' }
   | { name: 'settings' }
   | { name: 'more' }
 
@@ -91,6 +92,11 @@ export type StockMove = {
   syncStatus: SyncStatus
 }
 
+export type CategoryNode = {
+  name: string
+  children: string[]
+}
+
 export type AppSettings = {
   id: 'settings'
   activeObject: ObjectKey
@@ -101,6 +107,8 @@ export type AppSettings = {
   role: MemberRole
   lastSyncAt: string | null
   fontScale: number
+  /** Редактируемый справочник категорий */
+  categories: CategoryNode[]
 }
 
 export type InviteRecord = {

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CategoryPicker } from '../components/CategoryPicker'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { UNIT_OPTIONS } from '../data/units'
 import type { AccountingMode, UnitCode } from '../types'
@@ -8,6 +9,7 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
   const [name, setName] = useState('')
   const [mode, setMode] = useState<AccountingMode>('durable')
   const [category, setCategory] = useState('')
+  const [subcategory, setSubcategory] = useState('')
   const [unit, setUnit] = useState<UnitCode>('pcs')
   const [quantity, setQuantity] = useState('1')
   const [note, setNote] = useState('')
@@ -28,6 +30,7 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
     try {
       const qty = Number(quantity.replace(',', '.'))
       if (!name.trim()) throw new Error('Укажите название')
+      if (!category.trim()) throw new Error('Выберите категорию из справочника')
       if (quantity.trim() === '') throw new Error('Укажите количество')
       if (Number.isNaN(qty) || qty < 0) throw new Error('Некорректное количество')
       if (mode === 'durable' && (!Number.isInteger(qty) || qty < 1)) {
@@ -38,6 +41,7 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
         name,
         mode,
         category,
+        subcategory,
         unit: mode === 'durable' ? 'pcs' : unit,
         quantity: qty,
         note,
@@ -82,10 +86,15 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
           </select>
         </label>
 
-        <label className="field">
-          Категория
-          <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Инструменты" />
-        </label>
+        <CategoryPicker
+          tree={state.categories}
+          category={category}
+          subcategory={subcategory}
+          onChange={({ category: nextCategory, subcategory: nextSub }) => {
+            setCategory(nextCategory)
+            setSubcategory(nextSub)
+          }}
+        />
 
         <div className="row">
           <label className="field grow">

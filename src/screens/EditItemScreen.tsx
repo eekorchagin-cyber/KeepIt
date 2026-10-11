@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CategoryPicker } from '../components/CategoryPicker'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { UNIT_OPTIONS } from '../data/units'
 import type { AccountingMode, UnitCode } from '../types'
@@ -41,6 +42,7 @@ export function EditItemScreen({ state, itemId }: { state: KeepItState; itemId: 
     try {
       const qty = Number(quantity.replace(',', '.'))
       if (!name.trim()) throw new Error('Укажите название')
+      if (!category.trim()) throw new Error('Выберите категорию из справочника')
       if (quantity.trim() === '') throw new Error('Укажите количество')
       if (Number.isNaN(qty) || qty < 0) throw new Error('Некорректное количество')
       if (mode === 'durable' && (!Number.isInteger(qty) || qty < 1)) {
@@ -97,19 +99,15 @@ export function EditItemScreen({ state, itemId }: { state: KeepItState; itemId: 
           </select>
         </label>
 
-        <label className="field">
-          Категория
-          <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Инструменты" />
-        </label>
-
-        <label className="field">
-          Подкатегория
-          <input
-            value={subcategory}
-            onChange={(e) => setSubcategory(e.target.value)}
-            placeholder="Электрические"
-          />
-        </label>
+        <CategoryPicker
+          tree={state.categories}
+          category={category}
+          subcategory={subcategory}
+          onChange={({ category: nextCategory, subcategory: nextSub }) => {
+            setCategory(nextCategory)
+            setSubcategory(nextSub)
+          }}
+        />
 
         <div className="row">
           <label className="field grow">

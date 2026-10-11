@@ -27,6 +27,16 @@ export function MoreScreen({ state }: { state: KeepItState }) {
         <button
           type="button"
           className="list-item"
+          onClick={() => state.navigate({ name: 'categories' })}
+        >
+          <span>
+            <strong>Справочник категорий</strong>
+            <span className="muted">Категории и подкатегории</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          className="list-item"
           onClick={() => state.navigate({ name: 'print', placeId: root?.id })}
         >
           <span>

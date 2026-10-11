@@ -2,6 +2,7 @@ import { BottomNav } from './components/BottomNav'
 import { TopBar } from './components/TopBar'
 import { useKeepIt } from './hooks/useKeepIt'
 import { AddItemScreen } from './screens/AddItemScreen'
+import { CategoriesScreen } from './screens/CategoriesScreen'
 import { EditItemScreen } from './screens/EditItemScreen'
 import { HomeScreen } from './screens/HomeScreen'
 import { ItemScreen } from './screens/ItemScreen'
@@ -47,6 +48,7 @@ export default function App() {
         {state.screen.name === 'print' ? <PrintLabelsScreen state={state} placeId={state.screen.placeId} /> : null}
         {state.screen.name === 'settings' ? <SettingsScreen state={state} /> : null}
         {state.screen.name === 'lent' ? <LentItemsScreen state={state} /> : null}
+        {state.screen.name === 'categories' ? <CategoriesScreen state={state} /> : null}
         {state.screen.name === 'more' ? <MoreScreen state={state} /> : null}
       </main>
 

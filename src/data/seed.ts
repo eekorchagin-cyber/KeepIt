@@ -1,4 +1,5 @@
 import type { AppSettings, Item, Place } from '../types'
+import { cloneCategoryTree } from './categories'
 import { defaultObjectAppearance } from './icons'
 import { newId, nowIso } from './ids'
 import { recomputePlaceCodes } from './placeCodes'
@@ -65,6 +66,7 @@ export function defaultSettings(familyId: string): AppSettings {
     role: 'admin',
     lastSyncAt: null,
     fontScale: 1.1,
+    categories: cloneCategoryTree(),
   }
 }
 

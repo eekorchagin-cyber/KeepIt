@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  addCategory,
   addItem,
   addPlace,
   addRootObject,
+  addSubcategory,
   createFreePlaces,
+  deleteCategory,
   deletePlace,
+  deleteSubcategory,
   getSettings,
   listItems,
   listPlaces,
@@ -13,17 +17,21 @@ import {
   moveItem,
   movePlace,
   placePath,
+  renameCategory,
   renamePlace,
+  renameSubcategory,
   returnLentItem,
   updateItem,
   updateItemQuantity,
   updateRootAppearance,
   updateSettings,
 } from '../data/repository'
+import { cloneCategoryTree } from '../data/categories'
 import type { ObjectIconId } from '../data/icons'
 import type {
   AccountingMode,
   AppSettings,
+  CategoryNode,
   Item,
   ObjectKey,
   Place,
@@ -58,6 +66,7 @@ function fallbackParent(screen: Screen, places: Place[]): Screen {
     case 'settings':
     case 'print':
     case 'lent':
+    case 'categories':
       return { name: 'more' }
     case 'scan':
     case 'search':
@@ -71,6 +80,7 @@ export type KeepItState = {
   settings: AppSettings | null
   places: Place[]
   items: Item[]
+  categories: CategoryNode[]
   screen: Screen
   error: string | null
   canGoBack: boolean
@@ -81,6 +91,12 @@ export type KeepItState = {
   setScreen: (screen: Screen) => void
   setActiveObject: (objectKey: ObjectKey) => Promise<void>
   setTheme: (theme: ThemeMode) => Promise<void>
+  addCategory: (name: string) => Promise<void>
+  renameCategory: (oldName: string, newName: string) => Promise<void>
+  deleteCategory: (name: string) => Promise<void>
+  addSubcategory: (categoryName: string, name: string) => Promise<void>
+  renameSubcategory: (categoryName: string, oldName: string, newName: string) => Promise<void>
+  deleteSubcategory: (categoryName: string, name: string) => Promise<void>
   createChildPlace: (parentId: string, name: string, type: PlaceType) => Promise<Place>
   createRootObject: (input: {
     name: string
@@ -99,6 +115,7 @@ export type KeepItState = {
     name: string
     mode: AccountingMode
     category: string
+    subcategory?: string
     unit: UnitCode
     quantity: number
     note?: string
@@ -242,6 +259,7 @@ export function useKeepIt(): KeepItState {
     settings,
     places,
     items: visibleItems,
+    categories: settings?.categories?.length ? settings.categories : cloneCategoryTree(),
     screen,
     error,
     canGoBack,
@@ -258,6 +276,30 @@ export function useKeepIt(): KeepItState {
       const next = await updateSettings({ theme })
       applyTheme(next.theme, next.fontScale)
       setSettings(next)
+    },
+    addCategory: async (name) => {
+      await addCategory(name)
+      await refresh()
+    },
+    renameCategory: async (oldName, newName) => {
+      await renameCategory(oldName, newName)
+      await refresh()
+    },
+    deleteCategory: async (name) => {
+      await deleteCategory(name)
+      await refresh()
+    },
+    addSubcategory: async (categoryName, name) => {
+      await addSubcategory(categoryName, name)
+      await refresh()
+    },
+    renameSubcategory: async (categoryName, oldName, newName) => {
+      await renameSubcategory(categoryName, oldName, newName)
+      await refresh()
+    },
+    deleteSubcategory: async (categoryName, name) => {
+      await deleteSubcategory(categoryName, name)
+      await refresh()
     },
     createChildPlace: async (parentId, name, type) => {
       const place = await addPlace({ parentId, name, type })

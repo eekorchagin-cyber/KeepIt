@@ -1,4 +1,14 @@
-import type { AccountingMode, AppSettings, Item, ObjectKey, Place, PlaceType, UnitCode } from '../types'
+import type {
+  AccountingMode,
+  AppSettings,
+  CategoryNode,
+  Item,
+  ObjectKey,
+  Place,
+  PlaceType,
+  UnitCode,
+} from '../types'
+import { cloneCategoryTree, normalizeCategoryName } from './categories'
 import { db } from './db'
 import { newId, nowIso } from './ids'
 import {
@@ -11,6 +21,16 @@ import {
 import { defaultObjectAppearance, type ObjectIconId } from './icons'
 import { buildDraftItems, buildSeedPlaces, defaultSettings } from './seed'
 
+function normalizeSettings(settings: AppSettings): AppSettings {
+  return {
+    ...settings,
+    categories:
+      Array.isArray(settings.categories) && settings.categories.length > 0
+        ? cloneCategoryTree(settings.categories)
+        : cloneCategoryTree(),
+  }
+}
+
 export async function ensureSeeded(): Promise<AppSettings> {
   const existing = await db.settings.get('settings')
   if (existing) {
@@ -18,7 +38,11 @@ export async function ensureSeeded(): Promise<AppSettings> {
     await migrateHomeToApartment()
     await migrateObjectIconsIfNeeded()
     await migratePlaceCodesIfNeeded()
-    return existing
+    const normalized = normalizeSettings(existing)
+    if (!existing.categories?.length) {
+      await db.settings.put(normalized)
+    }
+    return normalized
   }
 
   const familyId = newId()
@@ -237,9 +261,170 @@ export async function getSettings(): Promise<AppSettings> {
 
 export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   const current = await getSettings()
-  const next = { ...current, ...patch, id: 'settings' as const }
+  const next = normalizeSettings({ ...current, ...patch, id: 'settings' as const })
   await db.settings.put(next)
   return next
+}
+
+async function saveCategoryTree(tree: CategoryNode[]): Promise<AppSettings> {
+  return updateSettings({ categories: cloneCategoryTree(tree) })
+}
+
+async function rewriteItemCategories(
+  match: { category: string; subcategory?: string | null },
+  next: { category: string; subcategory?: string | null },
+): Promise<void> {
+  const items = await db.items.toArray()
+  const updates: Item[] = []
+  for (const item of items) {
+    const sameCategory = normalizeCategoryName(item.category) === normalizeCategoryName(match.category)
+    if (!sameCategory) continue
+    if (match.subcategory != null) {
+      if (normalizeCategoryName(item.subcategory) !== normalizeCategoryName(match.subcategory)) continue
+    }
+    updates.push({
+      ...item,
+      category: next.category,
+      subcategory:
+        next.subcategory === null
+          ? ''
+          : next.subcategory !== undefined
+            ? next.subcategory
+            : item.subcategory,
+      version: item.version + 1,
+      updatedAt: nowIso(),
+      syncStatus: 'pending',
+    })
+  }
+  if (updates.length) await db.items.bulkPut(updates)
+}
+
+export async function addCategory(name: string): Promise<AppSettings> {
+  const trimmed = name.trim()
+  if (!trimmed) throw new Error('Укажите название категории')
+  const settings = await getSettings()
+  const tree = cloneCategoryTree(settings.categories)
+  if (tree.some((node) => normalizeCategoryName(node.name) === normalizeCategoryName(trimmed))) {
+    throw new Error('Такая категория уже есть')
+  }
+  tree.push({ name: trimmed, children: [] })
+  tree.sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+  return saveCategoryTree(tree)
+}
+
+export async function renameCategory(oldName: string, newName: string): Promise<AppSettings> {
+  const trimmed = newName.trim()
+  if (!trimmed) throw new Error('Укажите название категории')
+  const settings = await getSettings()
+  const tree = cloneCategoryTree(settings.categories)
+  const index = tree.findIndex(
+    (node) => normalizeCategoryName(node.name) === normalizeCategoryName(oldName),
+  )
+  if (index < 0) throw new Error('Категория не найдена')
+  if (
+    tree.some(
+      (node, i) =>
+        i !== index && normalizeCategoryName(node.name) === normalizeCategoryName(trimmed),
+    )
+  ) {
+    throw new Error('Такая категория уже есть')
+  }
+  const previous = tree[index]!.name
+  tree[index] = { ...tree[index]!, name: trimmed }
+  tree.sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+  await rewriteItemCategories({ category: previous }, { category: trimmed })
+  return saveCategoryTree(tree)
+}
+
+export async function deleteCategory(name: string): Promise<AppSettings> {
+  const settings = await getSettings()
+  const tree = cloneCategoryTree(settings.categories)
+  if (tree.length <= 1) throw new Error('Нельзя удалить последнюю категорию')
+  const index = tree.findIndex(
+    (node) => normalizeCategoryName(node.name) === normalizeCategoryName(name),
+  )
+  if (index < 0) throw new Error('Категория не найдена')
+  const used = (await db.items.toArray()).some(
+    (item) => normalizeCategoryName(item.category) === normalizeCategoryName(name),
+  )
+  if (used) {
+    throw new Error('Сначала переназначьте вещи из этой категории')
+  }
+  tree.splice(index, 1)
+  return saveCategoryTree(tree)
+}
+
+export async function addSubcategory(categoryName: string, name: string): Promise<AppSettings> {
+  const trimmed = name.trim()
+  if (!trimmed) throw new Error('Укажите название подкатегории')
+  const settings = await getSettings()
+  const tree = cloneCategoryTree(settings.categories)
+  const node = tree.find(
+    (entry) => normalizeCategoryName(entry.name) === normalizeCategoryName(categoryName),
+  )
+  if (!node) throw new Error('Категория не найдена')
+  if (node.children.some((child) => normalizeCategoryName(child) === normalizeCategoryName(trimmed))) {
+    throw new Error('Такая подкатегория уже есть')
+  }
+  node.children.push(trimmed)
+  node.children.sort((a, b) => a.localeCompare(b, 'ru'))
+  return saveCategoryTree(tree)
+}
+
+export async function renameSubcategory(
+  categoryName: string,
+  oldName: string,
+  newName: string,
+): Promise<AppSettings> {
+  const trimmed = newName.trim()
+  if (!trimmed) throw new Error('Укажите название подкатегории')
+  const settings = await getSettings()
+  const tree = cloneCategoryTree(settings.categories)
+  const node = tree.find(
+    (entry) => normalizeCategoryName(entry.name) === normalizeCategoryName(categoryName),
+  )
+  if (!node) throw new Error('Категория не найдена')
+  const index = node.children.findIndex(
+    (child) => normalizeCategoryName(child) === normalizeCategoryName(oldName),
+  )
+  if (index < 0) throw new Error('Подкатегория не найдена')
+  if (
+    node.children.some(
+      (child, i) =>
+        i !== index && normalizeCategoryName(child) === normalizeCategoryName(trimmed),
+    )
+  ) {
+    throw new Error('Такая подкатегория уже есть')
+  }
+  const previous = node.children[index]!
+  node.children[index] = trimmed
+  node.children.sort((a, b) => a.localeCompare(b, 'ru'))
+  await rewriteItemCategories(
+    { category: node.name, subcategory: previous },
+    { category: node.name, subcategory: trimmed },
+  )
+  return saveCategoryTree(tree)
+}
+
+export async function deleteSubcategory(categoryName: string, name: string): Promise<AppSettings> {
+  const settings = await getSettings()
+  const tree = cloneCategoryTree(settings.categories)
+  const node = tree.find(
+    (entry) => normalizeCategoryName(entry.name) === normalizeCategoryName(categoryName),
+  )
+  if (!node) throw new Error('Категория не найдена')
+  const used = (await db.items.toArray()).some(
+    (item) =>
+      normalizeCategoryName(item.category) === normalizeCategoryName(categoryName) &&
+      normalizeCategoryName(item.subcategory) === normalizeCategoryName(name),
+  )
+  if (used) {
+    throw new Error('Сначала переназначьте вещи из этой подкатегории')
+  }
+  node.children = node.children.filter(
+    (child) => normalizeCategoryName(child) !== normalizeCategoryName(name),
+  )
+  return saveCategoryTree(tree)
 }
 
 export async function listPlaces(objectKey?: ObjectKey): Promise<Place[]> {
@@ -481,6 +666,7 @@ export async function addItem(input: {
   name: string
   mode: AccountingMode
   category: string
+  subcategory?: string
   unit: UnitCode
   quantity: number
   note?: string
@@ -490,6 +676,7 @@ export async function addItem(input: {
   if (!place) throw new Error('Место не найдено')
 
   const name = input.name.trim()
+  if (!input.category.trim()) throw new Error('Выберите категорию из справочника')
 
   // Расходники с тем же названием и единицей в том же месте — увеличиваем остаток
   if (input.mode === 'consumable') {
@@ -516,7 +703,7 @@ export async function addItem(input: {
     name,
     mode: input.mode,
     category: input.category.trim() || (input.mode === 'consumable' ? 'Расходные материалы' : 'Прочее'),
-    subcategory: '',
+    subcategory: input.subcategory?.trim() ?? '',
     unit: input.unit,
     quantity: input.quantity,
     note: input.note?.trim() ?? '',

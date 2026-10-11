@@ -109,6 +109,27 @@ textarea {
   resize: vertical;
 }
 
+button.field-trigger {
+  width: 100%;
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--ink);
+  text-align: left;
+  font: inherit;
+  font-weight: 500;
+}
+
+button.field-trigger .muted {
+  flex-shrink: 0;
+}
+
 label.field {
   display: grid;
   gap: 6px;
@@ -583,6 +604,16 @@ html[data-theme='dark'] .icon-btn:disabled {
 
 .card-meta-actions {
   margin-top: 8px;
+}
+
+.catalog-row {
+  cursor: default;
+}
+
+.catalog-row button {
+  min-height: 40px;
+  padding: 0 12px;
+  flex-shrink: 0;
 }
 
 .lent-banner {
