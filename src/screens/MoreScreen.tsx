@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { objectLabelFromPlaces } from '../data/icons'
 
@@ -6,13 +7,62 @@ export function MoreScreen({ state }: { state: KeepItState }) {
   const root = state.places.find((place) => place.type === 'object' && place.objectKey === active)
   const lentCount = state.lentItems().length
   const activeLabel = objectLabelFromPlaces(active, state.places)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function onExport() {
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      await state.exportData()
+      setMessage('Резервная копия готова')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось экспортировать')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function askImport() {
+    setError(null)
+    setMessage(null)
+    fileRef.current?.click()
+  }
+
+  async function onImportFile(file: File | undefined) {
+    if (!file) return
+    if (
+      !confirm(
+        'Импорт заменит все данные на этом устройстве содержимым файла. Продолжить?',
+      )
+    ) {
+      if (fileRef.current) fileRef.current.value = ''
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      await state.importData(file)
+      setMessage('Данные импортированы')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось импортировать')
+    } finally {
+      setBusy(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
 
   return (
     <div className="stack screen-fill">
       <div className="panel stack">
         <strong>Ещё</strong>
         <p className="muted">
-          Активный объект: {activeLabel}. Данные хранятся на этом устройстве.
+          Активный объект: {activeLabel}. Данные хранятся на этом устройстве — переносите через
+          экспорт и импорт файла.
         </p>
       </div>
 
@@ -50,6 +100,35 @@ export function MoreScreen({ state }: { state: KeepItState }) {
             <span className="muted">Тема и сведения о версии</span>
           </span>
         </button>
+      </div>
+
+      <div className="panel stack">
+        <strong>Обмен данными</strong>
+        <p className="muted">
+          Экспортируйте файл на одном устройстве и импортируйте на другом (например, через файлы,
+          AirDrop или мессенджер).
+        </p>
+        <button type="button" className="list-item" disabled={busy} onClick={() => void onExport()}>
+          <span>
+            <strong>Экспорт</strong>
+            <span className="muted">Скачать или поделиться JSON</span>
+          </span>
+        </button>
+        <button type="button" className="list-item" disabled={busy} onClick={askImport}>
+          <span>
+            <strong>Импорт</strong>
+            <span className="muted">Заменить данные из файла</span>
+          </span>
+        </button>
+        <input
+          ref={fileRef}
+          className="file-input-hidden"
+          type="file"
+          accept="application/json,.json"
+          onChange={(event) => void onImportFile(event.target.files?.[0])}
+        />
+        {message ? <p className="muted">{message}</p> : null}
+        {error ? <p className="error">{error}</p> : null}
       </div>
     </div>
   )

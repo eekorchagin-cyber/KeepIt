@@ -93,23 +93,25 @@ export function CategoriesScreen({ state }: { state: KeepItState }) {
             <button type="button" className="ghost crumb" onClick={() => setOpenCategory(null)}>
               ← Все категории
             </button>
-            <div className="row wrap">
+            <div className="list-item catalog-row">
               <strong className="grow">{node.name}</strong>
               <button
                 type="button"
-                className="secondary"
+                className="icon-btn"
                 disabled={busy}
+                aria-label="Изменить"
                 onClick={() => startDraft({ kind: 'rename-category', name: node.name }, node.name)}
               >
-                Переименовать
+                ✎
               </button>
               <button
                 type="button"
-                className="danger"
+                className="icon-btn"
                 disabled={busy}
+                aria-label="Удалить"
                 onClick={() => void removeCategory(node.name)}
               >
-                Удалить
+                ×
               </button>
             </div>
             <strong>Подкатегории</strong>
@@ -122,8 +124,9 @@ export function CategoriesScreen({ state }: { state: KeepItState }) {
                     <strong className="grow">{child}</strong>
                     <button
                       type="button"
-                      className="secondary"
+                      className="icon-btn"
                       disabled={busy}
+                      aria-label="Изменить"
                       onClick={() =>
                         startDraft({ kind: 'rename-sub', category: node.name, name: child }, child)
                       }
@@ -132,8 +135,9 @@ export function CategoriesScreen({ state }: { state: KeepItState }) {
                     </button>
                     <button
                       type="button"
-                      className="secondary"
+                      className="icon-btn"
                       disabled={busy}
+                      aria-label="Удалить"
                       onClick={() => void removeSub(node.name, child)}
                     >
                       ×

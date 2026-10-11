@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { exportBackup, importBackupFromFile } from '../data/backup'
 import {
   addCategory,
   addItem,
@@ -145,6 +146,10 @@ export type KeepItState = {
   searchItems: (query: string) => Item[]
   /** Все переданные на время вещи (по всем объектам) */
   lentItems: () => Item[]
+  /** Скачать/поделиться JSON-резервной копией */
+  exportData: () => Promise<void>
+  /** Заменить локальные данные содержимым файла бэкапа */
+  importData: (file: File) => Promise<void>
 }
 
 function applyTheme(theme: ThemeMode, fontScale: number) {
@@ -397,5 +402,13 @@ export function useKeepIt(): KeepItState {
       )
     },
     lentItems: () => lentList,
+    exportData: async () => {
+      await exportBackup()
+    },
+    importData: async (file) => {
+      await importBackupFromFile(file)
+      await refresh()
+      jump({ name: 'more' })
+    },
   }
 }
