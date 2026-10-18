@@ -1,10 +1,12 @@
 import { useState, type ReactNode } from 'react'
+import { DataExchange } from './DataExchange'
 import { MoveItemSheet, MovePlaceSheet } from './MoveItemSheet'
 import { ObjectAppearanceSheet, appearanceFromPlace } from './ObjectAppearanceSheet'
 import { helpForScreen } from '../data/help'
 import { defaultObjectAppearance, objectLabelFromPlaces } from '../data/icons'
 import { PLACE_TYPES } from '../data/placeTypes'
 import { movesWithContents } from '../data/repository'
+import { dueServiceItems } from '../data/service'
 import type { KeepItState } from '../hooks/useKeepIt'
 import type { PlaceType, Screen } from '../types'
 
@@ -31,6 +33,7 @@ function titleFor(state: KeepItState): string {
   if (screen.name === 'lent') return 'Передано'
   if (screen.name === 'categories') return 'Категории'
   if (screen.name === 'settings') return 'Настройки'
+  if (screen.name === 'about') return 'О программе'
   if (screen.name === 'more') return 'Ещё'
   return 'KeepIt'
 }
@@ -202,7 +205,16 @@ export function TopBar({ state }: { state: KeepItState }) {
               +
             </button>
           ) : null}
-          <button type="button" className="icon-btn" aria-label="Справка и действия" onClick={() => openSheet('menu')}>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Справка"
+            title="Справка"
+            onClick={() => openSheet('help')}
+          >
+            ?
+          </button>
+          <button type="button" className="icon-btn" aria-label="Действия и настройки" onClick={() => openSheet('menu')}>
             ···
           </button>
         </div>
@@ -219,9 +231,6 @@ export function TopBar({ state }: { state: KeepItState }) {
 
       {sheet === 'menu' ? (
         <SheetFrame title="Действия" onClose={closeSheet}>
-          <button type="button" className="list-item" onClick={() => openSheet('help')}>
-            <strong>Справка: {help.title}</strong>
-          </button>
           <MenuActions
             state={state}
             onClose={closeSheet}
@@ -235,6 +244,8 @@ export function TopBar({ state }: { state: KeepItState }) {
             onDeletePlace={() => openSheet('delete-place')}
             onObjectLook={() => openSheet('object-look')}
           />
+          <AppMenuLinks state={state} onClose={closeSheet} />
+          <DataExchange state={state} onDone={closeSheet} />
         </SheetFrame>
       ) : null}
 
@@ -462,7 +473,7 @@ type Tab = 'home' | 'scan' | 'search' | 'more'
 function activeTab(screen: Screen): Tab {
   if (screen.name === 'scan') return 'scan'
   if (screen.name === 'search') return 'search'
-  if (screen.name === 'more' || screen.name === 'settings' || screen.name === 'print') return 'more'
+  if (screen.name === 'more' || screen.name === 'print' || screen.name === 'lent') return 'more'
   return 'home'
 }
 
@@ -526,6 +537,40 @@ function MoreIcon() {
   )
 }
 
+/** Общие пункты меню «···» на любом экране */
+function AppMenuLinks({ state, onClose }: { state: KeepItState; onClose: () => void }) {
+  const dueCount = dueServiceItems(state.serviceItems()).length
+  const links: Array<{ screen: Screen; title: string; hint: string; badge?: number }> = [
+    { screen: { name: 'reminders' }, title: 'Напоминания', hint: 'Техническое обслуживание оборудования', badge: dueCount },
+    { screen: { name: 'categories' }, title: 'Справочник категорий', hint: 'Категории и подкатегории' },
+    { screen: { name: 'settings' }, title: 'Настройки', hint: 'Тема и уведомления' },
+    { screen: { name: 'about' }, title: 'О программе', hint: 'Версия, обновления, разработчик' },
+  ]
+  return (
+    <>
+      {links
+        .filter((link) => link.screen.name !== state.screen.name)
+        .map((link) => (
+          <button
+            key={link.screen.name}
+            type="button"
+            className="list-item"
+            onClick={() => {
+              onClose()
+              state.navigate(link.screen)
+            }}
+          >
+            <span>
+              <strong>{link.title}</strong>
+              <span className="muted">{link.hint}</span>
+            </span>
+            {link.badge ? <span className="badge warn">{link.badge}</span> : null}
+          </button>
+        ))}
+    </>
+  )
+}
+
 function MenuActions({
   state,
   onClose,
@@ -545,20 +590,7 @@ function MenuActions({
 }) {
   const screen = state.screen
 
-  if (screen.name === 'home' || screen.name === 'more') {
-    return (
-      <button
-        type="button"
-        className="list-item"
-        onClick={() => {
-          onClose()
-          state.navigate({ name: 'settings' })
-        }}
-      >
-        <strong>Настройки приложения</strong>
-      </button>
-    )
-  }
+  if (screen.name === 'home' || screen.name === 'more') return null
 
   if (screen.name === 'object') {
     const objectKey = screen.objectKey

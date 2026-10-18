@@ -49,6 +49,7 @@ export type Screen =
   | { name: 'lent' }
   | { name: 'categories' }
   | { name: 'settings' }
+  | { name: 'about' }
   | { name: 'more' }
 
 export type Place = {

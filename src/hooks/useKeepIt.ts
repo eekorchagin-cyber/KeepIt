@@ -105,6 +105,7 @@ function fallbackParent(screen: Screen, places: Place[]): Screen {
     case 'scan':
     case 'search':
     case 'more':
+    case 'about':
       return { name: 'home' }
   }
 }

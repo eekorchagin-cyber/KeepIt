@@ -3,6 +3,7 @@ import { UpdateBanner } from './components/UpdateBanner'
 import { useAppUpdate } from './hooks/useAppUpdate'
 import { useKeepIt } from './hooks/useKeepIt'
 import { useServiceReminders } from './hooks/useServiceReminders'
+import { AboutScreen } from './screens/AboutScreen'
 import { AddItemScreen } from './screens/AddItemScreen'
 import { CategoriesScreen } from './screens/CategoriesScreen'
 import { CategorizeScreen } from './screens/CategorizeScreen'
@@ -73,7 +74,8 @@ export default function App() {
         {state.screen.name === 'scan' ? <ScanScreen state={state} /> : null}
         {state.screen.name === 'search' ? <SearchScreen state={state} /> : null}
         {state.screen.name === 'print' ? <PrintLabelsScreen state={state} placeId={state.screen.placeId} /> : null}
-        {state.screen.name === 'settings' ? <SettingsScreen state={state} update={update} /> : null}
+        {state.screen.name === 'settings' ? <SettingsScreen state={state} /> : null}
+        {state.screen.name === 'about' ? <AboutScreen update={update} /> : null}
         {state.screen.name === 'lent' ? <LentItemsScreen state={state} /> : null}
         {state.screen.name === 'categories' ? <CategoriesScreen state={state} /> : null}
         {state.screen.name === 'more' ? <MoreScreen state={state} /> : null}

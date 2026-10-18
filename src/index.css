@@ -377,18 +377,45 @@ label.field {
   object-fit: cover;
 }
 
-/* Узкий телефон: значки плотнее, чтобы осталось место для заголовка */
+/* Телефон: ряд значков сверху, заголовок экрана — второй строкой во всю ширину */
 @media (max-width: 430px) {
   .topbar {
-    gap: 4px;
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      'back actions'
+      'title title';
+    gap: 0 4px;
+  }
+
+  .topbar-home {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'actions'
+      'title';
+  }
+
+  .topbar > .icon-btn {
+    grid-area: back;
+  }
+
+  .topbar-title {
+    grid-area: title;
+  }
+
+  .topbar-actions {
+    grid-area: actions;
+    justify-content: flex-end;
   }
 
   .topbar-actions .icon-btn {
     width: 38px;
   }
+}
 
-  .topbar-title {
-    font-size: 1.05em;
+@media (max-width: 360px) {
+  .topbar-actions .icon-btn,
+  .topbar > .icon-btn {
+    width: 34px;
   }
 }
 
@@ -1189,10 +1216,19 @@ html[data-theme='dark'] .badge.service-soon {
   line-height: 1.35;
 }
 
-.app-version {
-  margin: 0;
+.about-hero {
+  justify-items: center;
   text-align: center;
-  font-size: 0.8em;
+}
+
+.about-icon {
+  width: 88px;
+  height: 88px;
+  border-radius: 20px;
+}
+
+.about-title {
+  font-size: 1.4em;
 }
 
 .progress-bar {

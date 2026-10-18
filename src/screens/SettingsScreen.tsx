@@ -1,7 +1,5 @@
 import { useState } from 'react'
 import type { KeepItState } from '../hooks/useKeepIt'
-import type { AppUpdateState } from '../hooks/useAppUpdate'
-import { APP_VERSION, parseAppVersion, versionLabel } from '../data/appVersion'
 import {
   disableUpdateNotifications,
   enableUpdateNotifications,
@@ -20,11 +18,9 @@ const NOTIFY_TEXT: Record<NotifyStatus, string> = {
   unsupported: 'Этот браузер не поддерживает уведомления. Новая версия появится плашкой внутри программы.',
 }
 
-export function SettingsScreen({ state, update }: { state: KeepItState; update: AppUpdateState }) {
-  const version = parseAppVersion()
+export function SettingsScreen({ state }: { state: KeepItState }) {
   const [status, setStatus] = useState<NotifyStatus>(() => notifyStatus())
   const [busy, setBusy] = useState(false)
-  const [checkResult, setCheckResult] = useState<string | null>(null)
 
   async function toggleNotifications() {
     setBusy(true)
@@ -33,14 +29,6 @@ export function SettingsScreen({ state, update }: { state: KeepItState; update: 
     } finally {
       setBusy(false)
     }
-  }
-
-  async function checkNow() {
-    setCheckResult(null)
-    const remote = await update.check()
-    if (!remote) setCheckResult('Не удалось проверить: нет связи с сервером.')
-    else if (remote.version === APP_VERSION) setCheckResult('У вас последняя версия.')
-    else setCheckResult(`Доступна версия ${versionLabel(remote.version)} — нажмите «Обновить» вверху экрана.`)
   }
 
   return (
@@ -64,18 +52,6 @@ export function SettingsScreen({ state, update }: { state: KeepItState; update: 
           Сейчас всё хранится локально в браузере этого устройства. Семья и Supabase подключим после отработки
           основных сценариев.
         </p>
-      </div>
-
-      <div className="panel stack">
-        <strong>Версия программы</strong>
-        <p>
-          Версия {version.number}
-          {version.date ? ` от ${version.date}${version.time ? `, ${version.time}` : ''}` : ''}
-        </p>
-        <button type="button" className="secondary" disabled={update.checking} onClick={() => void checkNow()}>
-          {update.checking ? 'Проверяю…' : 'Проверить обновления'}
-        </button>
-        {checkResult ? <p className="muted">{checkResult}</p> : null}
       </div>
 
       <div className="panel stack">
