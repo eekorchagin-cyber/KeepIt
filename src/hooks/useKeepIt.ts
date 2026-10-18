@@ -212,7 +212,7 @@ export type KeepItState = {
   removePlaces: (placeIds: string[]) => Promise<{ places: number; items: number; skipped: string[] }>
   /** Поиск по названию среди вещей и мест внутри места на любой глубине */
   searchInPlace: (placeId: string, query: string) => { places: Place[]; items: Item[] }
-  /** Группы дублей (одинаковое название в одном месте): в месте и вложенных или во всём активном объекте */
+  /** Группы дублей (одинаковое название в одном месте или в месте и вложенном): в месте и вложенных или во всём активном объекте */
   duplicateGroups: (placeId?: string) => DuplicateGroup[]
   /** Сколько вложенных мест и вещей во всём поддереве места */
   contentsOf: (placeId: string) => { places: number; items: number }
@@ -549,9 +549,12 @@ export function useKeepIt(): KeepItState {
       }
     },
     duplicateGroups: (placeId) => {
-      if (!placeId) return findDuplicateGroups(visibleItems)
+      if (!placeId) return findDuplicateGroups(visibleItems, places)
       const placeIds = subtreeIds(placeId, places)
-      return findDuplicateGroups(items.filter((item) => placeIds.has(item.placeId)))
+      return findDuplicateGroups(
+        items.filter((item) => placeIds.has(item.placeId)),
+        places,
+      )
     },
     contentsOf: (placeId) => {
       const placeIds = subtreeIds(placeId, places)

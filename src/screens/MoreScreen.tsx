@@ -100,7 +100,7 @@ export function MoreScreen({ state }: { state: KeepItState }) {
         >
           <span>
             <strong>Поиск дублей</strong>
-            <span className="muted">Одинаковые вещи в одном месте — суммировать или удалить</span>
+            <span className="muted">Одинаковые вещи в месте и на его полках — суммировать или удалить</span>
           </span>
           {duplicateCount > 0 ? <span className="badge warn">{duplicateCount}</span> : null}
         </button>

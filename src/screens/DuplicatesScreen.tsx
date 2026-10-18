@@ -68,7 +68,8 @@ export function DuplicatesScreen({ state, placeId }: { state: KeepItState; place
           {place ? ` · ${place.name}` : ''}
         </strong>
         <p className="muted">
-          Одинаковые названия в одном месте хранения. Отметьте, какую вещь оставить, и выберите: суммировать
+          Одинаковые названия в одном месте или в месте и вложенном в него (например, на стеллаже и на его
+          полке). Отметьте, какую вещь оставить — она останется на своём месте, — и выберите: суммировать
           количество или удалить лишние копии.
         </p>
         {groups.length > 1 ? (
@@ -106,12 +107,9 @@ export function DuplicatesScreen({ state, placeId }: { state: KeepItState; place
         const otherUnits = group.items.length - sameUnit.length
         return (
           <div key={group.key} className="panel stack">
-            <div>
-              <strong>
-                {keeper.name} × {group.items.length}
-              </strong>
-              <div className="muted">{placeLabel(group.placeId)}</div>
-            </div>
+            <strong>
+              {keeper.name} × {group.items.length}
+            </strong>
             <div className="list">
               {group.items.map((item) => (
                 <label key={item.id} className="check-row">
@@ -126,6 +124,7 @@ export function DuplicatesScreen({ state, placeId }: { state: KeepItState; place
                       {formatQty(item.quantity, item.unit)}
                       {item.id === keepId ? ' · оставить' : ''}
                     </strong>
+                    <span className="muted">{placeLabel(item.placeId)}</span>
                     <span className="muted">
                       <ModeCategory mode={item.mode} category={item.category} subcategory={item.subcategory} />
                     </span>
