@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { objectLabelFromPlaces } from '../data/icons'
 import { ModeCategory } from '../components/ModeCategory'
-import { InventoryEntry } from './InventoryScreen'
+import { PlaceTools } from '../components/PlaceTools'
 import { isItemLent, isUnusedFreeLabel } from '../data/repository'
 import { formatQty } from '../data/units'
 import type { Place, UnitCode } from '../types'
@@ -98,9 +98,7 @@ function NestedPlaces({ state, places }: { state: KeepItState; places: Place[] }
               <input type="checkbox" checked={selected.has(child.id)} onChange={() => toggle(child.id)} />
               <span className="stack-tight">
                 <strong>{child.name}</strong>
-                <span className="muted">
-                  {isEmpty(child) ? 'пусто' : `вещей: ${state.contentsOf(child.id).items}`}
-                </span>
+                <span className="muted">{isEmpty(child) ? 'пусто' : `вещей: ${state.contentsOf(child.id).items}`}</span>
               </span>
             </label>
           ) : (
@@ -167,41 +165,22 @@ export function PlaceScreen({ state, placeId }: { state: KeepItState; placeId: s
   return (
     <div className="stack">
       <div className="panel stack">
-        <div className="breadcrumbs">
-          <button
-            type="button"
-            onClick={() => state.navigate({ name: 'object', objectKey: place.objectKey })}
-          >
-            {objectLabelFromPlaces(place.objectKey, state.places)}
-          </button>
-          {path.slice(1).map((part) => (
-            <span key={part.id}>
-              /
-              <button type="button" onClick={() => state.navigate({ name: 'place', placeId: part.id })}>
-                {part.name}
-              </button>
-            </span>
-          ))}
+        <div className="place-head">
+          <div className="breadcrumbs place-head-path">
+            <button type="button" onClick={() => state.navigate({ name: 'object', objectKey: place.objectKey })}>
+              {objectLabelFromPlaces(place.objectKey, state.places)}
+            </button>
+            {path.slice(1, -1).map((part) => (
+              <span key={part.id}>
+                /
+                <button type="button" onClick={() => state.navigate({ name: 'place', placeId: part.id })}>
+                  {part.name}
+                </button>
+              </span>
+            ))}
+          </div>
+          <PlaceTools state={state} place={place} />
         </div>
-        <div>
-          <strong style={{ fontSize: '1.15em' }}>{place.name}</strong>
-          <div className="place-code">{place.code}</div>
-        </div>
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => state.navigate({ name: 'import-list', placeId })}
-        >
-          Импорт списка вещей
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => state.navigate({ name: 'gather-items', placeId })}
-        >
-          Перенести сюда вещи или коробки
-        </button>
-        <InventoryEntry state={state} place={place} />
         {duplicates > 0 ? (
           <button
             type="button"
@@ -245,13 +224,7 @@ export function PlaceScreen({ state, placeId }: { state: KeepItState; placeId: s
                         mode={item.mode}
                         category={item.category}
                         subcategory={item.subcategory}
-                        suffix={
-                          item.needsFill
-                            ? ' · заполнить'
-                            : isItemLent(item)
-                              ? ` · у ${item.lentTo}`
-                              : ''
-                        }
+                        suffix={item.needsFill ? ' · заполнить' : isItemLent(item) ? ` · у ${item.lentTo}` : ''}
                       />
                     </span>
                   </span>
@@ -334,9 +307,7 @@ function PlaceSearch({ state, place, children }: { state: KeepItState; place: Pl
                 >
                   <span className="stack-tight">
                     <strong>{entry.name}</strong>
-                    <span className="muted">
-                      Место · {entry.parentId ? relativePath(entry.parentId) : ''}
-                    </span>
+                    <span className="muted">Место · {entry.parentId ? relativePath(entry.parentId) : ''}</span>
                   </span>
                   <span className="badge">{formatStock(state.stockInSubtree(entry.id))}</span>
                 </button>

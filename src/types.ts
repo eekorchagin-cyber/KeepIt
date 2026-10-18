@@ -38,7 +38,8 @@ export type Screen =
   | { name: 'import-list'; placeId: string }
   | { name: 'gather-items'; placeId: string }
   | { name: 'duplicates'; placeId?: string }
-  | { name: 'inventory'; placeId: string }
+  /** Без view — список мест; stop — проверка места; scan — QR; report — итог */
+  | { name: 'inventory'; placeId: string; view?: 'stop' | 'scan' | 'report'; stopId?: string }
   | { name: 'reminders' }
   | { name: 'categorize'; placeId?: string }
   | { name: 'item'; itemId: string }

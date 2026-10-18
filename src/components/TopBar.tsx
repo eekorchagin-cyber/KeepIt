@@ -186,11 +186,6 @@ export function TopBar({ state }: { state: KeepItState }) {
         </h1>
 
         <div className="topbar-actions">
-          {state.screen.name === 'home' ? null : (
-            <NavButton state={state} tab="home" label="Разделы" target={{ name: 'home' }}>
-              <img className="nav-home" src="./icons/app-192.png" alt="" />
-            </NavButton>
-          )}
           <NavButton state={state} tab="scan" label="Сканер" target={{ name: 'scan' }}>
             <ScanIcon />
           </NavButton>
@@ -201,15 +196,20 @@ export function TopBar({ state }: { state: KeepItState }) {
             <MoreIcon />
           </NavButton>
           {addEnabled ? (
-            <button type="button" className="icon-btn" aria-label="Добавить" onClick={onAdd}>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={state.screen.name === 'home' ? 'Добавить объект' : 'Добавить место или вещь'}
+              onClick={onAdd}
+            >
               +
             </button>
           ) : null}
           <button
             type="button"
             className="icon-btn"
-            aria-label="Справка"
-            title="Справка"
+            aria-label="Справка по экрану"
+            title="Справка по экрану"
             onClick={() => openSheet('help')}
           >
             ?
@@ -221,32 +221,37 @@ export function TopBar({ state }: { state: KeepItState }) {
       </header>
 
       {sheet === 'help' ? (
-        <SheetFrame title={hint ? 'Подсказка' : help.title} onClose={closeSheet}>
-          <p>{hint ?? help.body}</p>
-          <button type="button" onClick={closeSheet}>
-            Понятно
-          </button>
-        </SheetFrame>
+        <PageFrame title={hint ? 'Подсказка' : `Справка: ${help.title}`} onClose={closeSheet}>
+          <div className="panel stack">
+            <p className="help-text">{hint ?? help.body}</p>
+          </div>
+        </PageFrame>
       ) : null}
 
       {sheet === 'menu' ? (
-        <SheetFrame title="Действия" onClose={closeSheet}>
-          <MenuActions
-            state={state}
-            onClose={closeSheet}
-            onRename={(placeId, name) => {
-              setRenamePlaceId(placeId)
-              setPlaceName(name)
-              openSheet('rename')
-            }}
-            onMoveItem={() => openSheet('move-item')}
-            onMovePlace={() => openSheet('move-place')}
-            onDeletePlace={() => openSheet('delete-place')}
-            onObjectLook={() => openSheet('object-look')}
-          />
-          <AppMenuLinks state={state} onClose={closeSheet} />
-          <DataExchange state={state} onDone={closeSheet} />
-        </SheetFrame>
+        <PageFrame title="Действия и настройки" onClose={closeSheet}>
+          <div className="panel stack">
+            <MenuActions
+              state={state}
+              onClose={closeSheet}
+              onRename={(placeId, name) => {
+                setRenamePlaceId(placeId)
+                setPlaceName(name)
+                openSheet('rename')
+              }}
+              onMoveItem={() => openSheet('move-item')}
+              onMovePlace={() => openSheet('move-place')}
+              onDeletePlace={() => openSheet('delete-place')}
+              onObjectLook={() => openSheet('object-look')}
+            />
+          </div>
+          <div className="panel stack">
+            <AppMenuLinks state={state} onClose={closeSheet} />
+          </div>
+          <div className="panel stack">
+            <DataExchange state={state} onDone={closeSheet} />
+          </div>
+        </PageFrame>
       ) : null}
 
       {sheet === 'object-look' && objectRoot ? (
@@ -468,13 +473,34 @@ function SheetFrame({
   )
 }
 
-type Tab = 'home' | 'scan' | 'search' | 'more'
+/** Окно на весь экран, оформленное как обычный экран (например «Ещё»): «←», заголовок, панели */
+function PageFrame({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  return (
+    <div className="page-overlay" role="dialog" aria-modal aria-label={title}>
+      <div className="app-shell">
+        <header className="topbar">
+          <button type="button" className="icon-btn" aria-label="Закрыть" onClick={onClose}>
+            ←
+          </button>
+          <h1 className="topbar-title">
+            <span>{title}</span>
+          </h1>
+        </header>
+        <main className="app-main">
+          <div className="stack screen-fill">{children}</div>
+        </main>
+      </div>
+    </div>
+  )
+}
 
-function activeTab(screen: Screen): Tab {
+type Tab = 'scan' | 'search' | 'more'
+
+function activeTab(screen: Screen): Tab | null {
   if (screen.name === 'scan') return 'scan'
   if (screen.name === 'search') return 'search'
   if (screen.name === 'more' || screen.name === 'print' || screen.name === 'lent') return 'more'
-  return 'home'
+  return null
 }
 
 /** Основные разделы — значки в верхней строке (подпись — во всплывающей подсказке и для экранного диктора) */
@@ -491,7 +517,7 @@ function NavButton({
   target: Screen
   children: ReactNode
 }) {
-  const active = tab !== 'home' && activeTab(state.screen) === tab
+  const active = activeTab(state.screen) === tab
   return (
     <button
       type="button"
@@ -499,7 +525,7 @@ function NavButton({
       aria-label={label}
       title={label}
       aria-current={active ? 'page' : undefined}
-      onClick={() => state.jump(target)}
+      onClick={() => state.navigate(target)}
     >
       {children}
     </button>

@@ -357,7 +357,6 @@ label.field {
 
 .icon-btn.nav-btn.active {
   color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .nav-svg {
@@ -368,13 +367,6 @@ label.field {
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-
-.nav-home {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  object-fit: cover;
 }
 
 /* Телефон: ряд значков сверху, заголовок экрана — второй строкой во всю ширину */
@@ -483,6 +475,27 @@ html[data-theme='dark'] .icon-btn {
 
 html[data-theme='dark'] .icon-btn:disabled {
   color: #4a5248;
+}
+
+/* «Справка» и «···» — на весь экран, как обычный экран */
+.page-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background:
+    radial-gradient(circle at top left, rgba(15, 106, 90, 0.12), transparent 40%),
+    radial-gradient(circle at bottom right, rgba(140, 110, 60, 0.12), transparent 35%),
+    var(--bg);
+  color: var(--ink);
+}
+
+.page-overlay .panel:empty {
+  display: none;
+}
+
+.help-text {
+  margin: 0;
+  line-height: 1.5;
 }
 
 .sheet-backdrop {
@@ -887,6 +900,117 @@ html[data-theme='dark'] .badge.warn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+/* Путь места — своей строкой во всю ширину, значки действий — строкой ниже */
+.place-head {
+  display: grid;
+  gap: 10px;
+}
+
+.place-head-path:empty {
+  display: none;
+}
+
+.place-head .place-tools {
+  justify-content: center;
+}
+
+.place-tools {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.icon-btn.tool-btn {
+  position: relative;
+  width: 42px;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--accent);
+}
+
+/* Долгое нажатие на значок — подсказка словами вместо системного меню */
+.icon-btn {
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.press-hint {
+  position: fixed;
+  z-index: 100;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 220px;
+  padding: 7px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elevated));
+  color: var(--accent);
+  font-size: 0.8em;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  box-shadow: 0 6px 18px rgba(28, 25, 20, 0.12);
+  pointer-events: none;
+}
+
+/* Уголок, указывающий на значок */
+.press-hint::before {
+  content: '';
+  position: absolute;
+  left: calc(50% + var(--arrow-shift, 0px));
+  top: -6px;
+  width: 10px;
+  height: 10px;
+  transform: translateX(-50%) rotate(45deg);
+  background: inherit;
+  border-left: inherit;
+  border-top: inherit;
+}
+
+.press-hint.above {
+  transform: translate(-50%, -100%);
+}
+
+.press-hint.above::before {
+  top: auto;
+  bottom: -6px;
+  border-left: 0;
+  border-top: 0;
+  border-right: inherit;
+  border-bottom: inherit;
+}
+
+.icon-btn.tool-btn.tool-with-date {
+  width: auto;
+  padding: 0 10px 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tool-date {
+  font-size: 0.5em;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.icon-btn.tool-btn.is-active {
+  border-color: color-mix(in srgb, #b7791f 55%, var(--line));
+}
+
+.tool-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #b7791f;
 }
 
 .inventory-row {

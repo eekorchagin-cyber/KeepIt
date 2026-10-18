@@ -2,7 +2,7 @@ import { ObjectBadge } from '../components/ObjectBadge'
 import { objectLabelFromPlaces } from '../data/icons'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { formatQty } from '../data/units'
-import { InventoryEntry } from './InventoryScreen'
+import { PlaceTools } from '../components/PlaceTools'
 import type { ObjectKey, UnitCode } from '../types'
 
 function formatStock(stock: { total: number; unit: UnitCode | null; itemCount: number }): string {
@@ -23,18 +23,8 @@ export function ObjectScreen({ state, objectKey }: { state: KeepItState; objectK
         <div className="grow">
           <strong className="object-hero-title">{label}</strong>
         </div>
+        {root ? <PlaceTools state={state} place={root} /> : null}
       </div>
-
-      {root ? (
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => state.navigate({ name: 'import-list', placeId: root.id })}
-        >
-          Импорт списка вещей в «{label}»
-        </button>
-      ) : null}
-      {root ? <InventoryEntry state={state} place={root} /> : null}
 
       <div className="panel stack">
         {root ? (

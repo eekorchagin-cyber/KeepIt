@@ -22,7 +22,7 @@ import { findName } from '../data/itemNames'
 import { formatLentDate, isItemLent, normalizeSearch } from '../data/repository'
 import { todayIso } from '../data/service'
 import { UNIT_LABELS, formatQty, isCountableUnit, unitOptionsFor } from '../data/units'
-import type { AccountingMode, Item, Place, UnitCode } from '../types'
+import type { AccountingMode, Item, Place, Screen, UnitCode } from '../types'
 
 type View = { name: 'route' } | { name: 'place'; placeId: string } | { name: 'scan' } | { name: 'report' }
 
@@ -58,34 +58,35 @@ function needsInteger(item: { mode: AccountingMode; unit: UnitCode }): boolean {
   return item.mode === 'durable' || isCountableUnit(item.unit)
 }
 
-/** Кнопка входа в инвентаризацию на экране места: начать или продолжить, дата прошлой проверки */
-export function InventoryEntry({ state, place }: { state: KeepItState; place: Place }) {
-  const session = useInventorySession()
-  const active = session?.rootId === place.id
-  let progress = ''
-  if (session && active) {
-    const route = inventoryRoute(place.id, state.places)
-    const ids = new Set(route.map((stop) => stop.place.id))
-    progress = ` (${session.checked.filter((id) => ids.has(id)).length} из ${route.length})`
-  }
-  return (
-    <button
-      type="button"
-      className={active ? 'place-banner' : 'secondary'}
-      onClick={() => state.navigate({ name: 'inventory', placeId: place.id })}
-    >
-      {active ? <strong>Продолжить инвентаризацию{progress}</strong> : 'Инвентаризация'}
-      {place.inventoriedAt ? (
-        <span className="muted"> · проверено {formatLentDate(place.inventoriedAt)}</span>
-      ) : null}
-    </button>
-  )
-}
-
-export function InventoryScreen({ state, placeId }: { state: KeepItState; placeId: string }) {
+export function InventoryScreen({
+  state,
+  screen,
+}: {
+  state: KeepItState
+  screen: Extract<Screen, { name: 'inventory' }>
+}) {
+  const placeId = screen.placeId
   const session = useInventorySession()
   const root = state.findPlace(placeId)
-  const [view, setView] = useState<View>({ name: 'route' })
+  // Вид — часть экрана, поэтому «←» вверху возвращает к предыдущему виду (список мест), а не из инвентаризации
+  const view: View =
+    screen.view === 'stop' && screen.stopId
+      ? { name: 'place', placeId: screen.stopId }
+      : screen.view === 'scan'
+        ? { name: 'scan' }
+        : screen.view === 'report'
+          ? { name: 'report' }
+          : { name: 'route' }
+  const toScreen = (next: View): Screen =>
+    next.name === 'place'
+      ? { name: 'inventory', placeId, view: 'stop', stopId: next.placeId }
+      : next.name === 'route'
+        ? { name: 'inventory', placeId }
+        : { name: 'inventory', placeId, view: next.name }
+  /** Из списка мест — новый шаг истории */
+  const open = (next: View) => state.navigate(toScreen(next))
+  /** Переход внутри шага (следующее место, место по QR) — без нового шага истории */
+  const replace = (next: View) => state.replaceScreen(toScreen(next))
   const [result, setResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -109,7 +110,7 @@ export function InventoryScreen({ state, placeId }: { state: KeepItState; placeI
     const start = afterId ? route.findIndex((stop) => stop.place.id === afterId) + 1 : 0
     const ordered = [...route.slice(start), ...route.slice(0, start)]
     const next = ordered.find((stop) => !current.checked.includes(stop.place.id) && stop.place.id !== afterId)
-    setView(next ? { name: 'place', placeId: next.place.id } : { name: 'report' })
+    replace(next ? { name: 'place', placeId: next.place.id } : { name: 'report' })
   }
 
   if (view.name === 'place') {
@@ -124,7 +125,7 @@ export function InventoryScreen({ state, placeId }: { state: KeepItState; placeI
           stop={stop}
           index={route.indexOf(stop)}
           total={route.length}
-          onBack={() => setView({ name: 'route' })}
+          onBack={() => state.goBack()}
           onChecked={() => openNext(stop.place.id)}
         />
       )
@@ -143,15 +144,15 @@ export function InventoryScreen({ state, placeId }: { state: KeepItState; placeI
           onResolved={(id) => {
             if (routeIds.has(id)) {
               setError(null)
-              setView({ name: 'place', placeId: id })
+              replace({ name: 'place', placeId: id })
             } else {
               setError(`Это место не входит в проверку «${root.name}». Отсканируйте другую метку.`)
-              setView({ name: 'route' })
+              state.goBack()
             }
           }}
           onFail={setError}
         />
-        <button type="button" className="ghost" onClick={() => setView({ name: 'route' })}>
+        <button type="button" className="ghost" onClick={() => state.goBack()}>
           ← К списку мест
         </button>
       </div>
@@ -165,10 +166,10 @@ export function InventoryScreen({ state, placeId }: { state: KeepItState; placeI
         session={session}
         root={root}
         route={route}
-        onBack={() => setView({ name: 'route' })}
+        onBack={() => state.goBack()}
         onApplied={(text) => {
           setResult(text)
-          setView({ name: 'route' })
+          state.goBack()
         }}
       />
     )
@@ -187,15 +188,15 @@ export function InventoryScreen({ state, placeId }: { state: KeepItState; placeI
         </span>
         {error ? <p className="error">{error}</p> : null}
         {nextStop ? (
-          <button type="button" onClick={() => setView({ name: 'place', placeId: nextStop.place.id })}>
+          <button type="button" onClick={() => open({ name: 'place', placeId: nextStop.place.id })}>
             Проверять: {innerPath(state, root.id, nextStop.place.id)}
           </button>
         ) : null}
         <div className="split-row">
-          <button type="button" className="secondary" onClick={() => setView({ name: 'scan' })}>
+          <button type="button" className="secondary" onClick={() => open({ name: 'scan' })}>
             Сканировать QR места
           </button>
-          <button type="button" className={nextStop ? 'secondary' : undefined} onClick={() => setView({ name: 'report' })}>
+          <button type="button" className={nextStop ? 'secondary' : undefined} onClick={() => open({ name: 'report' })}>
             Итог
           </button>
         </div>
@@ -214,7 +215,7 @@ export function InventoryScreen({ state, placeId }: { state: KeepItState; placeI
                 type="button"
                 className={`list-item inventory-stop${done ? ' is-done' : ''}`}
                 style={{ paddingLeft: 12 + Math.min(stop.depth, 6) * 14 }}
-                onClick={() => setView({ name: 'place', placeId: stop.place.id })}
+                onClick={() => open({ name: 'place', placeId: stop.place.id })}
               >
                 <span className="stack-tight">
                   <strong>{stop.place.name}</strong>
@@ -558,7 +559,7 @@ function FoundRow({ state, entry }: { state: KeepItState; entry: FoundEntry }) {
       <button
         type="button"
         className="icon-btn"
-        aria-label="Убрать"
+        aria-label="Убрать из найденного"
         onClick={() =>
           updateInventory((current) => ({ ...current, found: current.found.filter((other) => other.id !== entry.id) }))
         }

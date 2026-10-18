@@ -119,6 +119,8 @@ export type KeepItState = {
   /** Справочник названий вещей */
   itemNames: ItemName[]
   screen: Screen
+  /** Текущий экран открыт стрелкой «←» (прокрутку экрана можно восстановить) */
+  cameBack: boolean
   error: string | null
   canGoBack: boolean
   refresh: () => Promise<void>
@@ -126,6 +128,8 @@ export type KeepItState = {
   jump: (screen: Screen) => void
   goBack: () => void
   setScreen: (screen: Screen) => void
+  /** Сменить экран, не добавляя шаг в историю «←» */
+  replaceScreen: (screen: Screen) => void
   setActiveObject: (objectKey: ObjectKey) => Promise<void>
   setTheme: (theme: ThemeMode) => Promise<void>
   addCategory: (name: string) => Promise<void>
@@ -249,6 +253,7 @@ export function useKeepIt(): KeepItState {
   const [itemNames, setItemNames] = useState<ItemName[]>([])
   const [screen, setScreenState] = useState<Screen>({ name: 'home' })
   const [history, setHistory] = useState<Screen[]>([])
+  const [cameBack, setCameBack] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const screenRef = useRef(screen)
   const historyRef = useRef(history)
@@ -285,6 +290,7 @@ export function useKeepIt(): KeepItState {
       const match = hash.match(/^\/place\/([0-9a-f-]{36})$/i)
       if (match?.[1]) {
         setHistory([])
+        setCameBack(false)
         setScreenState({ name: 'place', placeId: match[1] })
       }
     }
@@ -321,16 +327,24 @@ export function useKeepIt(): KeepItState {
     const current = screenRef.current
     if (sameScreen(current, next)) return
     setHistory((prev) => [...prev, current])
+    setCameBack(false)
     setScreenState(next)
   }, [])
 
   const jump = useCallback((next: Screen) => {
     setHistory([])
+    setCameBack(false)
+    setScreenState(next)
+  }, [])
+
+  const replaceScreen = useCallback((next: Screen) => {
+    setCameBack(false)
     setScreenState(next)
   }, [])
 
   const goBack = useCallback(() => {
     const prev = historyRef.current
+    setCameBack(true)
     if (prev.length > 0) {
       const target = prev[prev.length - 1]!
       setHistory(prev.slice(0, -1))
@@ -358,6 +372,7 @@ export function useKeepIt(): KeepItState {
     categories,
     itemNames,
     screen,
+    cameBack,
     error,
     canGoBack,
     refresh,
@@ -365,6 +380,7 @@ export function useKeepIt(): KeepItState {
     jump,
     goBack,
     setScreen: navigate,
+    replaceScreen,
     setActiveObject: async (objectKey) => {
       await updateSettings({ activeObject: objectKey })
       await refresh()

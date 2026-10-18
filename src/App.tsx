@@ -1,7 +1,9 @@
+import { useLayoutEffect, useRef, type CSSProperties } from 'react'
 import { TopBar } from './components/TopBar'
 import { UpdateBanner } from './components/UpdateBanner'
 import { useAppUpdate } from './hooks/useAppUpdate'
 import { useKeepIt } from './hooks/useKeepIt'
+import { useLongPressHints, type LongPressHint } from './hooks/useLongPressHints'
 import { useServiceReminders } from './hooks/useServiceReminders'
 import { AboutScreen } from './screens/AboutScreen'
 import { AddItemScreen } from './screens/AddItemScreen'
@@ -24,10 +26,39 @@ import { ScanScreen } from './screens/ScanScreen'
 import { SearchScreen } from './screens/SearchScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
 
+/** Подсказка при долгом нажатии: у края экрана плашка сдвигается внутрь, уголок остаётся над значком */
+function PressHint({ hint }: { hint: LongPressHint }) {
+  const half = 118
+  const left = Math.min(Math.max(hint.x, half), window.innerWidth - half)
+  return (
+    <span
+      className={`press-hint${hint.below ? '' : ' above'}`}
+      role="tooltip"
+      style={{ left, top: hint.y, '--arrow-shift': `${hint.x - left}px` } as CSSProperties}
+    >
+      {hint.text}
+    </span>
+  )
+}
+
+/** Прокрутка каждого экрана — чтобы вернуть её при «←» */
+const scrollByScreen = new Map<string, number>()
+
 export default function App() {
   const state = useKeepIt()
   const update = useAppUpdate()
   useServiceReminders(state)
+  const mainRef = useRef<HTMLElement | null>(null)
+  const screenKey = JSON.stringify(state.screen)
+  const { cameBack } = state
+  const hint = useLongPressHints()
+
+  // Новый экран — с верхней строки; при возврате «←» — там, где был
+  useLayoutEffect(() => {
+    const main = mainRef.current
+    if (!main) return
+    main.scrollTop = cameBack ? (scrollByScreen.get(screenKey) ?? 0) : 0
+  }, [screenKey, cameBack])
 
   if (state.loading || !state.settings) {
     return (
@@ -41,7 +72,11 @@ export default function App() {
     <div className="app-shell">
       <TopBar state={state} />
 
-      <main className="app-main">
+      <main
+        className="app-main"
+        ref={mainRef}
+        onScroll={(event) => scrollByScreen.set(screenKey, event.currentTarget.scrollTop)}
+      >
         <UpdateBanner update={update} />
         {state.error ? <p className="error">{state.error}</p> : null}
 
@@ -59,7 +94,7 @@ export default function App() {
           <DuplicatesScreen state={state} placeId={state.screen.placeId} />
         ) : null}
         {state.screen.name === 'inventory' ? (
-          <InventoryScreen key={state.screen.placeId} state={state} placeId={state.screen.placeId} />
+          <InventoryScreen key={state.screen.placeId} state={state} screen={state.screen} />
         ) : null}
         {state.screen.name === 'gather-items' ? (
           <GatherItemsScreen state={state} placeId={state.screen.placeId} />
@@ -80,6 +115,8 @@ export default function App() {
         {state.screen.name === 'categories' ? <CategoriesScreen state={state} /> : null}
         {state.screen.name === 'more' ? <MoreScreen state={state} /> : null}
       </main>
+
+      {hint ? <PressHint hint={hint} /> : null}
     </div>
   )
 }
