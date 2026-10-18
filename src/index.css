@@ -144,7 +144,7 @@ label.field {
   height: 100dvh;
   padding: calc(12px + env(safe-area-inset-top)) var(--pad) 0;
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto 1fr;
   gap: 10px;
   overflow: hidden;
 }
@@ -152,7 +152,7 @@ label.field {
 .app-main {
   min-height: 0;
   overflow: auto;
-  padding-bottom: 8px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
 }
 
 .screen-fill {
@@ -355,92 +355,41 @@ label.field {
   overflow: hidden;
 }
 
-.bottom-nav {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
-  padding: 8px 4px calc(8px + env(safe-area-inset-bottom));
-  border-top: 1px solid var(--line);
-  background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
-}
-
-.bottom-nav button {
-  min-height: 56px;
-  display: grid;
-  justify-items: center;
-  gap: 4px;
-  padding: 6px 4px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 0.72em;
-  border-radius: 12px;
-}
-
-.bottom-nav button.active {
+.icon-btn.nav-btn.active {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
-.bottom-nav img {
+.nav-svg {
   width: 24px;
   height: 24px;
-  border-radius: 6px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.nav-home {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
   object-fit: cover;
 }
 
-.nav-glyph {
-  width: 24px;
-  height: 24px;
-  display: block;
-  position: relative;
-}
+/* Узкий телефон: значки плотнее, чтобы осталось место для заголовка */
+@media (max-width: 430px) {
+  .topbar {
+    gap: 4px;
+  }
 
-.nav-scan {
-  border: 2px solid currentColor;
-  border-radius: 6px;
-}
+  .topbar-actions .icon-btn {
+    width: 38px;
+  }
 
-.nav-scan::before {
-  content: '';
-  position: absolute;
-  inset: 5px;
-  border: 2px solid currentColor;
-  border-radius: 2px;
-}
-
-.nav-search {
-  border: 2px solid currentColor;
-  border-radius: 50%;
-  width: 16px;
-  height: 16px;
-  margin-top: 2px;
-  margin-left: 2px;
-}
-
-.nav-search::after {
-  content: '';
-  position: absolute;
-  width: 8px;
-  height: 2px;
-  background: currentColor;
-  right: -4px;
-  bottom: -1px;
-  transform: rotate(45deg);
-  border-radius: 1px;
-}
-
-.nav-more {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-}
-
-.nav-more::before {
-  content: '···';
-  font-size: 1.4em;
-  letter-spacing: 0.05em;
-  line-height: 24px;
+  .topbar-title {
+    font-size: 1.05em;
+  }
 }
 
 .topbar {
@@ -467,6 +416,12 @@ label.field {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.topbar-title span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .topbar-actions {
@@ -892,6 +847,77 @@ html[data-theme='dark'] .badge.warn {
   background: #000;
   aspect-ratio: 3 / 4;
   object-fit: cover;
+}
+
+.step-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.step-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inventory-row {
+  cursor: default;
+}
+
+.inventory-row.is-ok {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
+}
+
+.inventory-row.is-qty {
+  border-color: color-mix(in srgb, #b7791f 50%, var(--line));
+  background: color-mix(in srgb, #b7791f 10%, var(--bg-elevated));
+}
+
+.inventory-row.is-missing {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg-elevated));
+}
+
+.inventory-row.is-found {
+  border-style: dashed;
+}
+
+.inventory-check {
+  grid-template-columns: 1fr;
+}
+
+.inventory-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr 1fr;
+  gap: 6px;
+}
+
+.inventory-actions button {
+  min-height: 40px;
+  padding: 0 10px;
+}
+
+.inventory-qty {
+  grid-column: 1 / -1;
+}
+
+.inventory-stop.is-done {
+  opacity: 0.75;
+}
+
+.step-home {
+  display: inline-flex;
+  align-items: center;
+  padding-inline: 8px;
+}
+
+.step-home img {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
 }
 
 .print-steps {

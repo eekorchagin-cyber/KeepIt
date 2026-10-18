@@ -2,6 +2,7 @@ import { ObjectBadge } from '../components/ObjectBadge'
 import { objectLabelFromPlaces } from '../data/icons'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { formatQty } from '../data/units'
+import { InventoryEntry } from './InventoryScreen'
 import type { ObjectKey, UnitCode } from '../types'
 
 function formatStock(stock: { total: number; unit: UnitCode | null; itemCount: number }): string {
@@ -33,6 +34,7 @@ export function ObjectScreen({ state, objectKey }: { state: KeepItState; objectK
           Импорт списка вещей в «{label}»
         </button>
       ) : null}
+      {root ? <InventoryEntry state={state} place={root} /> : null}
 
       <div className="panel stack">
         {root ? (

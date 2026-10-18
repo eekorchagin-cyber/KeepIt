@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { objectLabelFromPlaces } from '../data/icons'
 import { ModeCategory } from '../components/ModeCategory'
+import { InventoryEntry } from './InventoryScreen'
 import { isItemLent, isUnusedFreeLabel } from '../data/repository'
 import { formatQty } from '../data/units'
 import type { Place, UnitCode } from '../types'
@@ -200,6 +201,7 @@ export function PlaceScreen({ state, placeId }: { state: KeepItState; placeId: s
         >
           Перенести сюда вещи или коробки
         </button>
+        <InventoryEntry state={state} place={place} />
         {duplicates > 0 ? (
           <button
             type="button"

@@ -301,14 +301,18 @@ function PlaceTargetSheet({
   )
 }
 
-function MoveQrScan({
+export function MoveQrScan({
   busy,
   onResolved,
   onFail,
+  hint = 'Наведите камеру на QR нового места хранения',
+  actionLabel = 'Перенести по коду',
 }: {
   busy: boolean
   onResolved: (placeId: string) => void
   onFail: (message: string) => void
+  hint?: string
+  actionLabel?: string
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -404,7 +408,7 @@ function MoveQrScan({
 
   return (
     <div className="stack">
-      <p className="muted">Наведите камеру на QR нового места хранения</p>
+      <p className="muted">{hint}</p>
       <video ref={videoRef} className="scanner-video move-scan-video" muted playsInline />
       {cameraError ? <p className="muted">{cameraError}</p> : null}
       <label className="field">
@@ -417,7 +421,7 @@ function MoveQrScan({
         />
       </label>
       <button type="button" disabled={busy || !manual.trim()} onClick={() => void resolveRaw(manual)}>
-        Перенести по коду
+        {actionLabel}
       </button>
     </div>
   )

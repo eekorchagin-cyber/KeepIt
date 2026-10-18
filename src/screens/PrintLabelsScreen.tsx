@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal, flushSync } from 'react-dom'
 import QRCode from 'qrcode'
+import { PlaceStepPicker } from '../components/PlaceStepPicker'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { placeUrl } from '../data/placeCodes'
 import { canHoldFreeLabels } from '../data/repository'
-import { renderLabelPng, shareLabelImages } from '../data/labelImage'
+import { renderLabelPng, safeFileName, shareFiles, shareLabelImages } from '../data/labelImage'
+import { renderLabelsPdf } from '../data/labelPdf'
 import { DEFAULT_PRINTER_ID, PRINTERS, findPrinter, sizeLabel, type LabelSize } from '../data/printers'
 import type { Place } from '../types'
 
@@ -13,6 +15,8 @@ const PRINTER_KEY = 'keepit-printer'
 const SIZE_KEY = 'keepit-label-size'
 
 type PrintMode = 'room' | 'single'
+/** Куда выводить метки AirPrint-принтера: системное окно печати или PDF-файл */
+type OutputTarget = 'print' | 'pdf'
 
 type LabelView = Place & { qrDataUrl: string }
 type LabelImage = { id: string; name: string; blob: Blob; previewUrl: string }
@@ -38,6 +42,27 @@ function writeStored(key: string, value: string) {
   }
 }
 
+/** Список меток: название, полный путь и QR-код. */
+function LabelList({ title, labels }: { title: string; labels: LabelView[] }) {
+  return (
+    <div className="stack">
+      <strong>{title}</strong>
+      {labels.length === 0 ? <span className="muted">Выберите место</span> : null}
+      <div className="list">
+        {labels.map((label) => (
+          <div key={label.id} className="list-item">
+            <span className="stack-tight">
+              <strong>{label.name}</strong>
+              <span className="place-code muted">{label.code}</span>
+            </span>
+            <img src={label.qrDataUrl} alt="" width={56} height={56} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; placeId?: string }) {
   const startId = placeId ?? state.places.find((place) => place.type === 'object')?.id ?? ''
   const start = state.findPlace(startId)
@@ -61,7 +86,9 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [askFree, setAskFree] = useState(false)
+  /** Готовый PDF и набор меток (с принтером), для которого он собран */
+  const [pdfResult, setPdf] = useState<{ file: File; key: string } | null>(null)
+  const [askFree, setAskFree] = useState<OutputTarget | null>(null)
   const [freeCount, setFreeCount] = useState(12)
   /** Свободные метки, созданные перед печатью — печатаются вместе с выбранными местами */
   const [extraPlaces, setExtraPlaces] = useState<Place[]>([])
@@ -72,11 +99,6 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
 
   const objectKey = start?.objectKey
   const objectPlaces = state.places.filter((place) => place.objectKey === objectKey)
-  const pathLabel = (place: Place) =>
-    state
-      .pathFor(place.id)
-      .map((part) => part.name)
-      .join(' / ')
   const roomOptions = [
     ...objectPlaces
       .filter((place) => place.type === 'object')
@@ -86,10 +108,6 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
       .map((place) => ({ id: place.id, label: place.name }))
       .sort((a, b) => a.label.localeCompare(b.label, 'ru')),
   ]
-  const placeOptions = objectPlaces
-    .map((place) => ({ id: place.id, label: pathLabel(place) }))
-    .sort((a, b) => a.label.localeCompare(b.label, 'ru'))
-
   const sourcePlaces = useMemo(() => {
     if (mode === 'single') {
       const one = state.findPlace(singleId)
@@ -110,6 +128,14 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     const seen = new Set(sourcePlaces.map((place) => place.id))
     return [...sourcePlaces, ...extraPlaces.filter((place) => !seen.has(place.id))]
   }, [sourcePlaces, extraPlaces])
+
+  function labelSetKey(list: Place[]): string {
+    return `${printer.id}:${list
+      .map((place) => place.id)
+      .sort()
+      .join(',')}`
+  }
+  const pdf = pdfResult && pdfResult.key === labelSetKey(printList) ? pdfResult.file : null
 
   useEffect(() => {
     let cancelled = false
@@ -142,10 +168,23 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
    * AirPrint — системное окно печати (недостающие QR дорисовываются и сразу попадают в слой печати);
    * термопринтер — картинки точно под размер этикетки.
    */
-  async function output(list: Place[]) {
+  async function output(list: Place[], target: OutputTarget) {
     setBusy(true)
     setError(null)
     try {
+      if (isAirPrint && target === 'pdf') {
+        const blob = await renderLabelsPdf(
+          list.map((place) => ({ name: place.name, url: placeUrl(place.id) })),
+          printer.method === 'airprint-tape' ? 'airprint-tape' : 'airprint-a4',
+        )
+        const title = list.length === 1 ? safeFileName(list[0]!.name) : `${list.length} шт.`
+        setPdf({
+          file: new File([blob], `Метки KeepIt — ${title}.pdf`, { type: 'application/pdf' }),
+          key: labelSetKey(list),
+        })
+        setMessage(`PDF готов: меток ${list.length}. Нажмите «Сохранить PDF».`)
+        return
+      }
       if (isAirPrint) {
         const known = new Map(labels.map((label) => [label.id, label]))
         const full = await Promise.all(
@@ -184,6 +223,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     setPrinterId(id)
     setSizeIndex(0)
     setImages([])
+    setPdf(null)
     setMessage(null)
     writeStored(PRINTER_KEY, id)
     writeStored(SIZE_KEY, '0')
@@ -200,18 +240,20 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
   const freeParent = state.findPlace(mode === 'room' ? roomId : roomOf(singleId))
   const canCreateFree = Boolean(freeParent && canHoldFreeLabels(freeParent.type))
 
-  function onMainClick() {
+  function onMainClick(target: OutputTarget) {
     setError(null)
     setMessage(null)
     setImages([])
-    if (canCreateFree) setAskFree(true)
-    else void output(printList)
+    setPdf(null)
+    if (canCreateFree) setAskFree(target)
+    else void output(printList, target)
   }
 
   async function withFree(create: boolean) {
-    setAskFree(false)
+    const target = askFree ?? 'print'
+    setAskFree(null)
     if (!create || !freeParent) {
-      void output(printList)
+      void output(printList, target)
       return
     }
     setBusy(true)
@@ -220,7 +262,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
       const created = await state.makeFreeLabels(freeParent.id, freeCount)
       setExtraPlaces((current) => [...current, ...created])
       const seen = new Set(printList.map((place) => place.id))
-      await output([...printList, ...created.filter((place) => !seen.has(place.id))])
+      await output([...printList, ...created.filter((place) => !seen.has(place.id))], target)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка')
       setBusy(false)
@@ -238,6 +280,21 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
       )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось сохранить картинки')
+    }
+  }
+
+  async function savePdf() {
+    if (!pdf) return
+    setError(null)
+    try {
+      const result = await shareFiles([pdf])
+      setMessage(
+        result === 'shared'
+          ? 'PDF передан. Чтобы сохранить его, выберите «Сохранить в Файлы».'
+          : 'PDF скачан в «Загрузки».',
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось сохранить PDF')
     }
   }
 
@@ -275,23 +332,16 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
             </select>
           </label>
         ) : (
-          <label className="field">
-            Место хранения
-            <select value={singleId} onChange={(event) => setSingleId(event.target.value)}>
-              {placeOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <PlaceStepPicker state={state} value={singleId} onChange={setSingleId} />
         )}
-        <p className="muted">
-          {mode === 'room'
-            ? `Метки на помещение и все места в нём на любой глубине (стеллажи, полки, коробки): ${sourcePlaces.length}.`
-            : 'Одна метка на выбранное место.'}{' '}
-          На этикетке — QR-код и название места.
-        </p>
+        {mode === 'room' ? (
+          <p className="muted">
+            Метки на помещение и все места в нём на любой глубине (стеллажи, полки, коробки):{' '}
+            {sourcePlaces.length}. На этикетке — QR-код и название места.
+          </p>
+        ) : (
+          <LabelList title="Метки к печати" labels={labels} />
+        )}
       </div>
 
       <div className="panel stack">
@@ -336,9 +386,24 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
           ))}
         </ol>
 
-        <button type="button" onClick={onMainClick} disabled={printList.length === 0 || busy}>
+        <button type="button" onClick={() => onMainClick('print')} disabled={printList.length === 0 || busy}>
           {mainLabel}
         </button>
+        {isAirPrint ? (
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => onMainClick('pdf')}
+            disabled={printList.length === 0 || busy}
+          >
+            Печать в файл PDF ({printList.length})
+          </button>
+        ) : null}
+        {pdf ? (
+          <button type="button" onClick={() => void savePdf()}>
+            Сохранить PDF
+          </button>
+        ) : null}
         {images.length > 0 ? (
           <button type="button" onClick={() => void saveImages()}>
             Сохранить картинки ({images.length})
@@ -357,29 +422,18 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
             ))}
           </div>
         </div>
-      ) : (
+      ) : mode === 'room' ? (
         <div className="panel stack">
-          <strong>Метки к печати</strong>
-          <div className="list">
-            {labels.map((label) => (
-              <div key={label.id} className="list-item">
-                <span className="stack-tight">
-                  <strong>{label.name}</strong>
-                  <span className="place-code muted">{label.code}</span>
-                </span>
-                <img src={label.qrDataUrl} alt="" width={56} height={56} />
-              </div>
-            ))}
-          </div>
+          <LabelList title="Метки к печати" labels={labels} />
         </div>
-      )}
+      ) : null}
 
       {askFree && freeParent ? (
-        <div className="sheet-backdrop" onClick={() => setAskFree(false)} role="presentation">
+        <div className="sheet-backdrop" onClick={() => setAskFree(null)} role="presentation">
           <div className="sheet" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal>
             <div className="row">
               <strong className="grow">Создать свободные метки?</strong>
-              <button type="button" className="icon-btn" onClick={() => setAskFree(false)} aria-label="Закрыть">
+              <button type="button" className="icon-btn" onClick={() => setAskFree(null)} aria-label="Закрыть">
                 ×
               </button>
             </div>

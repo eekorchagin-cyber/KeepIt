@@ -11,6 +11,8 @@ import {
   addRootObject,
   addSubcategory,
   applyImportPlan,
+  applyInventory,
+  type InventoryApply,
   assignCategory,
   convertItemToPlace,
   mergeDuplicates,
@@ -86,6 +88,7 @@ function fallbackParent(screen: Screen, places: Place[]): Screen {
     case 'add-item':
     case 'import-list':
     case 'gather-items':
+    case 'inventory':
       return { name: 'place', placeId: screen.placeId }
     case 'categorize':
     case 'duplicates':
@@ -226,6 +229,8 @@ export type KeepItState = {
   duplicateGroups: (placeId?: string) => DuplicateGroup[]
   /** Сколько вложенных мест и вещей во всём поддереве места */
   contentsOf: (placeId: string) => { places: number; items: number }
+  /** Записать итог инвентаризации */
+  finishInventory: (input: InventoryApply) => Promise<void>
 }
 
 function applyTheme(theme: ThemeMode, fontScale: number) {
@@ -585,6 +590,13 @@ export function useKeepIt(): KeepItState {
       return {
         places: placeIds.size - 1,
         items: items.filter((item) => placeIds.has(item.placeId)).length,
+      }
+    },
+    finishInventory: async (input) => {
+      try {
+        await applyInventory(input)
+      } finally {
+        await refresh()
       }
     },
   }

@@ -6,7 +6,7 @@ import { defaultObjectAppearance, objectLabelFromPlaces } from '../data/icons'
 import { PLACE_TYPES } from '../data/placeTypes'
 import { movesWithContents } from '../data/repository'
 import type { KeepItState } from '../hooks/useKeepIt'
-import type { PlaceType } from '../types'
+import type { PlaceType, Screen } from '../types'
 
 function titleFor(state: KeepItState): string {
   const screen = state.screen
@@ -22,6 +22,7 @@ function titleFor(state: KeepItState): string {
   if (screen.name === 'import-list') return 'Импорт списка'
   if (screen.name === 'gather-items') return 'Перенести сюда'
   if (screen.name === 'duplicates') return 'Дубли вещей'
+  if (screen.name === 'inventory') return 'Инвентаризация'
   if (screen.name === 'reminders') return 'Напоминания'
   if (screen.name === 'categorize') return 'Категории вещей'
   if (screen.name === 'scan') return 'Сканер'
@@ -182,13 +183,26 @@ export function TopBar({ state }: { state: KeepItState }) {
         </h1>
 
         <div className="topbar-actions">
-          <button type="button" className="icon-btn" aria-label="Добавить" disabled={!addEnabled} onClick={onAdd}>
-            +
-          </button>
-          <button type="button" className="icon-btn" aria-label="Справка" onClick={() => openSheet('help')}>
-            ?
-          </button>
-          <button type="button" className="icon-btn" aria-label="Действия" onClick={() => openSheet('menu')}>
+          {state.screen.name === 'home' ? null : (
+            <NavButton state={state} tab="home" label="Разделы" target={{ name: 'home' }}>
+              <img className="nav-home" src="./icons/app-192.png" alt="" />
+            </NavButton>
+          )}
+          <NavButton state={state} tab="scan" label="Сканер" target={{ name: 'scan' }}>
+            <ScanIcon />
+          </NavButton>
+          <NavButton state={state} tab="search" label="Поиск" target={{ name: 'search' }}>
+            <SearchIcon />
+          </NavButton>
+          <NavButton state={state} tab="more" label="Ещё" target={{ name: 'more' }}>
+            <MoreIcon />
+          </NavButton>
+          {addEnabled ? (
+            <button type="button" className="icon-btn" aria-label="Добавить" onClick={onAdd}>
+              +
+            </button>
+          ) : null}
+          <button type="button" className="icon-btn" aria-label="Справка и действия" onClick={() => openSheet('menu')}>
             ···
           </button>
         </div>
@@ -205,6 +219,9 @@ export function TopBar({ state }: { state: KeepItState }) {
 
       {sheet === 'menu' ? (
         <SheetFrame title="Действия" onClose={closeSheet}>
+          <button type="button" className="list-item" onClick={() => openSheet('help')}>
+            <strong>Справка: {help.title}</strong>
+          </button>
           <MenuActions
             state={state}
             onClose={closeSheet}
@@ -437,6 +454,75 @@ function SheetFrame({
         <div className="stack">{children}</div>
       </div>
     </div>
+  )
+}
+
+type Tab = 'home' | 'scan' | 'search' | 'more'
+
+function activeTab(screen: Screen): Tab {
+  if (screen.name === 'scan') return 'scan'
+  if (screen.name === 'search') return 'search'
+  if (screen.name === 'more' || screen.name === 'settings' || screen.name === 'print') return 'more'
+  return 'home'
+}
+
+/** Основные разделы — значки в верхней строке (подпись — во всплывающей подсказке и для экранного диктора) */
+function NavButton({
+  state,
+  tab,
+  label,
+  target,
+  children,
+}: {
+  state: KeepItState
+  tab: Tab
+  label: string
+  target: Screen
+  children: ReactNode
+}) {
+  const active = tab !== 'home' && activeTab(state.screen) === tab
+  return (
+    <button
+      type="button"
+      className={`icon-btn nav-btn${active ? ' active' : ''}`}
+      aria-label={label}
+      title={label}
+      aria-current={active ? 'page' : undefined}
+      onClick={() => state.jump(target)}
+    >
+      {children}
+    </button>
+  )
+}
+
+/** Видоискатель с уголками и линией сканирования */
+function ScanIcon() {
+  return (
+    <svg className="nav-svg" viewBox="0 0 24 24" aria-hidden>
+      <path d="M4 9V6a2 2 0 0 1 2-2h3M15 4h3a2 2 0 0 1 2 2v3M20 15v3a2 2 0 0 1-2 2h-3M9 20H6a2 2 0 0 1-2-2v-3" />
+      <path d="M7 12h10" />
+    </svg>
+  )
+}
+
+function SearchIcon() {
+  return (
+    <svg className="nav-svg" viewBox="0 0 24 24" aria-hidden>
+      <circle cx="10.5" cy="10.5" r="6" />
+      <path d="M15 15l5 5" />
+    </svg>
+  )
+}
+
+/** «Ещё» — плитки разделов */
+function MoreIcon() {
+  return (
+    <svg className="nav-svg" viewBox="0 0 24 24" aria-hidden>
+      <rect x="4" y="4" width="6.5" height="6.5" rx="1.5" />
+      <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" />
+      <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" />
+      <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" />
+    </svg>
   )
 }
 

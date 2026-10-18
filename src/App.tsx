@@ -1,4 +1,3 @@
-import { BottomNav } from './components/BottomNav'
 import { TopBar } from './components/TopBar'
 import { UpdateBanner } from './components/UpdateBanner'
 import { useAppUpdate } from './hooks/useAppUpdate'
@@ -12,6 +11,7 @@ import { DuplicatesScreen } from './screens/DuplicatesScreen'
 import { EditItemScreen } from './screens/EditItemScreen'
 import { GatherItemsScreen } from './screens/GatherItemsScreen'
 import { HomeScreen } from './screens/HomeScreen'
+import { InventoryScreen } from './screens/InventoryScreen'
 import { ItemScreen } from './screens/ItemScreen'
 import { LentItemsScreen } from './screens/LentItemsScreen'
 import { MoreScreen } from './screens/MoreScreen'
@@ -57,6 +57,9 @@ export default function App() {
         {state.screen.name === 'duplicates' ? (
           <DuplicatesScreen state={state} placeId={state.screen.placeId} />
         ) : null}
+        {state.screen.name === 'inventory' ? (
+          <InventoryScreen key={state.screen.placeId} state={state} placeId={state.screen.placeId} />
+        ) : null}
         {state.screen.name === 'gather-items' ? (
           <GatherItemsScreen state={state} placeId={state.screen.placeId} />
         ) : null}
@@ -75,8 +78,6 @@ export default function App() {
         {state.screen.name === 'categories' ? <CategoriesScreen state={state} /> : null}
         {state.screen.name === 'more' ? <MoreScreen state={state} /> : null}
       </main>
-
-      <BottomNav state={state} />
     </div>
   )
 }

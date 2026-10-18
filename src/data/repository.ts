@@ -1388,6 +1388,110 @@ export async function assignCategory(
   return updates.length
 }
 
+export type InventoryApply = {
+  /** Найдено другое количество */
+  changed: Array<{ itemId: string; quantity: number }>
+  /** Не найдены и выбраны к удалению */
+  removeIds: string[]
+  /** Нашлись в проверенном месте, а записаны в другом; quantity меньше записанного — переносится часть */
+  moves: Array<{ itemId: string; placeId: string; quantity: number }>
+  /** Нашлись и нигде не записаны — добавляются «без категории» */
+  added: Array<{ placeId: string; name: string; quantity: number; unit: UnitCode; mode: AccountingMode }>
+  /** Проверенные места — получают дату инвентаризации */
+  checkedPlaceIds: string[]
+  date: string
+}
+
+/**
+ * Перенести часть вещи: в записи остаётся остаток, в новом месте появляется запись на перенесённое
+ * (расходник складывается с таким же). Всё количество — обычный перенос.
+ */
+export async function moveItemPart(itemId: string, quantity: number, placeId: string): Promise<void> {
+  const item = await getItem(itemId)
+  if (!item || quantity <= 0) return
+  if (quantity >= item.quantity) {
+    await moveItem(itemId, placeId)
+    return
+  }
+  const place = await getPlace(placeId)
+  if (!place) throw new Error('Место не найдено')
+  const twin =
+    item.mode === 'consumable'
+      ? (await db.items.where('placeId').equals(place.id).toArray()).find(
+          (entry) =>
+            entry.mode === 'consumable' &&
+            entry.unit === item.unit &&
+            normalizeSearch(entry.name) === normalizeSearch(item.name),
+        )
+      : undefined
+  await updateItemQuantity(item.id, item.quantity - quantity, 'out', `Инвентаризация: ${quantity} нашлось в «${place.name}»`)
+  if (twin) {
+    await updateItemQuantity(twin.id, twin.quantity + quantity, 'in', 'Инвентаризация: перенос части')
+    return
+  }
+  await db.items.put({
+    ...normalizeItem(item),
+    id: newId(),
+    placeId: place.id,
+    quantity,
+    version: 1,
+    updatedAt: nowIso(),
+    syncStatus: 'pending',
+  })
+}
+
+/** Итог инвентаризации: корректировки остатков, переносы, новые и удалённые вещи, дата проверки мест. */
+export async function applyInventory(input: InventoryApply): Promise<void> {
+  // Сначала переносы: после переноса части в записи остаётся остаток, и корректировка задаётся уже от него
+  for (const move of input.moves) await moveItemPart(move.itemId, move.quantity, move.placeId)
+  for (const change of input.changed) {
+    await updateItemQuantity(change.itemId, change.quantity, 'adjust', 'Инвентаризация')
+  }
+  if (input.removeIds.length) await deleteItems(input.removeIds)
+
+  const settings = await getSettings()
+  const at = nowIso()
+  const newItems: Item[] = input.added.map((entry) => ({
+    id: newId(),
+    familyId: settings.familyId,
+    placeId: entry.placeId,
+    name: entry.name.trim(),
+    mode: entry.mode,
+    category: '',
+    subcategory: '',
+    unit: unitForMode(entry.mode, entry.unit),
+    quantity: entry.quantity,
+    note: '',
+    tags: [],
+    needsFill: false,
+    needsCategory: true,
+    lentTo: '',
+    lentAt: '',
+    visibility: 'shared',
+    version: 1,
+    updatedAt: at,
+    syncStatus: 'pending',
+  }))
+  const places = (await db.places.bulkGet(input.checkedPlaceIds)).filter((place): place is Place => Boolean(place))
+  await db.transaction('rw', [db.places, db.items, db.itemNames], async () => {
+    if (newItems.length) {
+      await db.items.bulkPut(newItems)
+      await upsertNames(newItems.map((item) => ({ name: item.name, mode: item.mode, unit: item.unit })))
+    }
+    if (places.length) {
+      await db.places.bulkPut(
+        places.map((place) => ({
+          ...place,
+          inventoriedAt: input.date,
+          version: place.version + 1,
+          updatedAt: at,
+          syncStatus: 'pending' as const,
+        })),
+      )
+    }
+  })
+}
+
 /** Постоянное хранение возможно только для целого количества. */
 function canSwitchMode(item: Item, mode: AccountingMode): boolean {
   return mode === 'consumable' || Number.isInteger(item.quantity)

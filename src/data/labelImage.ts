@@ -39,12 +39,7 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
  * Картинка этикетки точно под размер ленты: слева QR-код, справа название места.
  * QR рисуется по модулям без сглаживания — чёткая печать на термопринтере.
  */
-export async function renderLabelPng(
-  name: string,
-  url: string,
-  size: LabelSize,
-  dotsPerMm: number,
-): Promise<Blob> {
+function drawLabel(name: string, url: string, size: LabelSize, dotsPerMm: number): HTMLCanvasElement {
   const width = Math.round(size.widthMm * dotsPerMm)
   const height = Math.round(size.heightMm * dotsPerMm)
   const margin = Math.round(1.5 * dotsPerMm)
@@ -98,21 +93,47 @@ export async function renderLabelPng(
   const shown = lines.slice(0, Math.max(1, Math.floor(textHeight / lineHeight)))
   const blockTop = Math.round((height - shown.length * lineHeight) / 2)
   shown.forEach((text, index) => ctx.fillText(text, textX, blockTop + index * lineHeight))
+  return canvas
+}
 
+function canvasBlob(canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob> {
   return new Promise((resolve, reject) =>
-    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Не удалось сохранить картинку'))), 'image/png'),
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Не удалось сохранить картинку'))), type, quality),
   )
 }
 
-function safeFileName(name: string): string {
+export function renderLabelPng(name: string, url: string, size: LabelSize, dotsPerMm: number): Promise<Blob> {
+  return canvasBlob(drawLabel(name, url, size, dotsPerMm), 'image/png')
+}
+
+/** Метка в JPEG — для вставки в PDF (формат, который PDF принимает без перекодирования). */
+export async function renderLabelJpeg(
+  name: string,
+  url: string,
+  size: LabelSize,
+  dotsPerMm: number,
+): Promise<{ bytes: Uint8Array; width: number; height: number }> {
+  const canvas = drawLabel(name, url, size, dotsPerMm)
+  const blob = await canvasBlob(canvas, 'image/jpeg', 0.95)
+  return { bytes: new Uint8Array(await blob.arrayBuffer()), width: canvas.width, height: canvas.height }
+}
+
+export function safeFileName(name: string): string {
   return name.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'метка'
 }
 
 /** Отдать картинки через «Поделиться» (на телефоне — «Сохранить изображения»), иначе скачать. */
-export async function shareLabelImages(labels: Array<{ name: string; blob: Blob }>): Promise<'shared' | 'downloaded'> {
-  const files = labels.map(
-    (label, index) => new File([label.blob], `${String(index + 1).padStart(2, '0')} ${safeFileName(label.name)}.png`, { type: 'image/png' }),
+export function shareLabelImages(labels: Array<{ name: string; blob: Blob }>): Promise<'shared' | 'downloaded'> {
+  return shareFiles(
+    labels.map(
+      (label, index) =>
+        new File([label.blob], `${String(index + 1).padStart(2, '0')} ${safeFileName(label.name)}.png`, { type: 'image/png' }),
+    ),
   )
+}
+
+/** «Поделиться» файлами (на телефоне — «Сохранить в Файлы» / «Сохранить изображения»), иначе скачать. */
+export async function shareFiles(files: File[]): Promise<'shared' | 'downloaded'> {
   if (typeof navigator.canShare === 'function' && navigator.canShare({ files })) {
     try {
       await navigator.share({ files, title: 'Метки KeepIt' })

@@ -38,6 +38,7 @@ export type Screen =
   | { name: 'import-list'; placeId: string }
   | { name: 'gather-items'; placeId: string }
   | { name: 'duplicates'; placeId?: string }
+  | { name: 'inventory'; placeId: string }
   | { name: 'reminders' }
   | { name: 'categorize'; placeId?: string }
   | { name: 'item'; itemId: string }
@@ -64,6 +65,8 @@ export type Place = {
   /** Цвет фона значка (hex), только для главных объектов */
   iconBg: string
   archived: boolean
+  /** Дата последней инвентаризации (YYYY-MM-DD); пусто — не проводилась */
+  inventoriedAt?: string
   visibility: 'shared' | 'personal'
   version: number
   updatedAt: string
