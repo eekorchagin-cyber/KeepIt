@@ -625,6 +625,37 @@ export async function deletePlaceWithContents(placeId: string): Promise<{ places
   return { places: placeIds.length, items: items.length }
 }
 
+/**
+ * Удалить несколько мест разом: пустые — сразу, коробки и контейнеры — с содержимым.
+ * Непустые помещения/полки пропускаются, чтобы не потерять вещи.
+ */
+export async function deletePlaces(
+  placeIds: string[],
+): Promise<{ places: number; items: number; skipped: string[] }> {
+  const all = await db.places.toArray()
+  const byId = new Map(all.map((place) => [place.id, place]))
+  const placeSet = new Set<string>()
+  const skipped: string[] = []
+
+  for (const id of placeIds) {
+    const place = byId.get(id)
+    if (!place || place.type === 'object') continue
+    const nested = [place.id, ...descendantIds(place.id, all)]
+    const hasContent =
+      nested.length > 1 || (await db.items.where('placeId').equals(place.id).count()) > 0
+    if (hasContent && !movesWithContents(place.type)) {
+      skipped.push(place.name)
+      continue
+    }
+    for (const nestedId of nested) placeSet.add(nestedId)
+  }
+
+  const ids = [...placeSet]
+  const items = ids.length ? await db.items.where('placeId').anyOf(ids).toArray() : []
+  await removeItemsAndPlaces(items, ids)
+  return { places: ids.length, items: items.length, skipped }
+}
+
 /** Удалить вещи (например, неверно распознанные при импорте) вместе с их движениями. */
 export async function deleteItems(itemIds: string[]): Promise<number> {
   const items = (await db.items.bulkGet(itemIds)).filter((item): item is Item => Boolean(item))
@@ -936,16 +967,36 @@ export function normalizeSearch(value: string): string {
     .trim()
 }
 
+const FREE_LABEL_PREFIX = 'Свободная метка'
+const FREE_LABEL_NOTE = 'Свободная метка — задайте название при первом сканировании'
+
+/** Куда уместно класть свободные метки для будущих коробок (не внутрь коробки). */
+export function canHoldFreeLabels(type: PlaceType): boolean {
+  return type === 'object' || type === 'room' || type === 'cabinet'
+}
+
+/** Ещё не использованная свободная метка: имя и примечание не меняли. */
+export function isUnusedFreeLabel(place: Place): boolean {
+  return place.note === FREE_LABEL_NOTE && new RegExp(`^${FREE_LABEL_PREFIX} \\d+$`).test(place.name)
+}
+
 export async function createFreePlaces(parentId: string, count: number): Promise<Place[]> {
   const parent = await getPlace(parentId)
   if (!parent) throw new Error('Родитель не найден')
+  if (!canHoldFreeLabels(parent.type)) {
+    throw new Error('Свободные метки создаются в объекте, помещении или шкафу, а не внутри коробки')
+  }
   const settings = await getSettings()
   const all = await db.places.toArray()
   const parentPath = placePathNames(parent.id, all)
   const at = nowIso()
   const created: Place[] = []
+  const lastNumber = all
+    .filter((place) => place.parentId === parent.id)
+    .map((place) => new RegExp(`^${FREE_LABEL_PREFIX} (\\d+)$`).exec(place.name)?.[1])
+    .reduce((max, value) => Math.max(max, value ? Number(value) : 0), 0)
   for (let i = 0; i < count; i += 1) {
-    const name = `Свободная метка ${i + 1}`
+    const name = `${FREE_LABEL_PREFIX} ${lastNumber + i + 1}`
     const draft: Place = {
       id: newId(),
       familyId: settings.familyId,
@@ -954,7 +1005,7 @@ export async function createFreePlaces(parentId: string, count: number): Promise
       name,
       type: 'box',
       code: formatPlacePathCode([...parentPath, name]),
-      note: 'Свободная метка — задайте название при первом сканировании',
+      note: FREE_LABEL_NOTE,
       iconId: '',
       iconBg: '',
       archived: false,

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { placeUrl } from '../data/placeCodes'
+import { canHoldFreeLabels } from '../data/repository'
 import type { Place } from '../types'
 
 const LABELS_PER_PAGE = 12
@@ -41,8 +42,16 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     }
   }, [sourcePlaces])
 
+  const parent = parentId ? state.findPlace(parentId) : undefined
+  const canCreateFree = Boolean(parent && canHoldFreeLabels(parent.type))
+
   async function createSheet() {
-    if (!parentId) return
+    if (!parentId || !parent) return
+    const question =
+      `Создать ${LABELS_PER_PAGE} новых пустых мест «Свободная метка» внутри «${parent.name}»?\n\n` +
+      'Это заготовки для будущих коробок: наклейте метку, а при первом сканировании задайте название. ' +
+      'Для печати метки уже существующего места создавать ничего не нужно — нажмите «Печать».'
+    if (!window.confirm(question)) return
     setBusy(true)
     setError(null)
     try {
@@ -58,15 +67,24 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     <div className="stack">
       <div className="panel stack">
         <strong>Печать QR-меток (A4)</strong>
-        <p className="muted">Сетка примерно на лист: {LABELS_PER_PAGE} этикеток. Печать — через диалог браузера.</p>
-        <div className="row wrap">
-          <button type="button" disabled={busy || !parentId} onClick={() => void createSheet()}>
-            Создать {LABELS_PER_PAGE} свободных меток
-          </button>
-          <button type="button" className="secondary" onClick={() => window.print()} disabled={labels.length === 0}>
-            Печать
-          </button>
-        </div>
+        <p className="muted">
+          Метки для «{parent?.name ?? 'места'}» и вложенных в него мест — список ниже. Печать — через
+          диалог браузера.
+        </p>
+        <button type="button" onClick={() => window.print()} disabled={labels.length === 0}>
+          Печать
+        </button>
+        {canCreateFree ? (
+          <>
+            <p className="muted">
+              Свободные метки — заготовки для будущих коробок: создаются {LABELS_PER_PAGE} пустых мест,
+              название задаётся при первом сканировании.
+            </p>
+            <button type="button" className="secondary" disabled={busy} onClick={() => void createSheet()}>
+              Создать {LABELS_PER_PAGE} свободных меток
+            </button>
+          </>
+        ) : null}
         {error ? <p className="error">{error}</p> : null}
       </div>
 

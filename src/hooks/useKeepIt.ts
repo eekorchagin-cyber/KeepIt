@@ -14,6 +14,7 @@ import {
   assignCategory,
   deleteItems,
   deletePlaceWithContents,
+  deletePlaces,
   setItemsMode,
   type ImportPlan,
   type ImportProgress,
@@ -187,6 +188,8 @@ export type KeepItState = {
   removeItems: (itemIds: string[]) => Promise<number>
   /** Коробка/контейнер вместе с вложенными местами и вещами */
   removePlaceWithContents: (placeId: string) => Promise<void>
+  /** Несколько мест разом; непустые помещения/полки пропускаются */
+  removePlaces: (placeIds: string[]) => Promise<{ places: number; items: number; skipped: string[] }>
   /** Сколько вложенных мест и вещей во всём поддереве места */
   contentsOf: (placeId: string) => { places: number; items: number }
 }
@@ -257,9 +260,10 @@ export function useKeepIt(): KeepItState {
     return items.filter((item) => placeIds.has(item.placeId))
   }, [items, places, settings?.activeObject])
 
+  const savedCategories = settings?.categories
   const categories = useMemo(
-    () => sortCategoryTree(settings?.categories?.length ? settings.categories : cloneCategoryTree()),
-    [settings?.categories],
+    () => sortCategoryTree(savedCategories?.length ? savedCategories : cloneCategoryTree()),
+    [savedCategories],
   )
 
   const lentList = useMemo(
@@ -479,6 +483,11 @@ export function useKeepIt(): KeepItState {
     removePlaceWithContents: async (placeId) => {
       await deletePlaceWithContents(placeId)
       await refresh()
+    },
+    removePlaces: async (placeIds) => {
+      const result = await deletePlaces(placeIds)
+      await refresh()
+      return result
     },
     contentsOf: (placeId) => {
       const placeIds = subtreeIds(placeId, places)
