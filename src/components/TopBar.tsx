@@ -26,7 +26,7 @@ function titleFor(state: KeepItState): string {
   if (screen.name === 'categorize') return 'Категории вещей'
   if (screen.name === 'scan') return 'Сканер'
   if (screen.name === 'search') return 'Поиск'
-  if (screen.name === 'print') return 'Метки'
+  if (screen.name === 'print') return 'Печать QR-меток'
   if (screen.name === 'lent') return 'Передано'
   if (screen.name === 'categories') return 'Категории'
   if (screen.name === 'settings') return 'Настройки'
