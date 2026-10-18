@@ -1,5 +1,7 @@
 import { BottomNav } from './components/BottomNav'
 import { TopBar } from './components/TopBar'
+import { UpdateBanner } from './components/UpdateBanner'
+import { useAppUpdate } from './hooks/useAppUpdate'
 import { useKeepIt } from './hooks/useKeepIt'
 import { AddItemScreen } from './screens/AddItemScreen'
 import { CategoriesScreen } from './screens/CategoriesScreen'
@@ -19,6 +21,7 @@ import { SettingsScreen } from './screens/SettingsScreen'
 
 export default function App() {
   const state = useKeepIt()
+  const update = useAppUpdate()
 
   if (state.loading || !state.settings) {
     return (
@@ -33,6 +36,7 @@ export default function App() {
       <TopBar state={state} />
 
       <main className="app-main">
+        <UpdateBanner update={update} />
         {state.error ? <p className="error">{state.error}</p> : null}
 
         {state.screen.name === 'home' ? <HomeScreen state={state} /> : null}
@@ -54,7 +58,7 @@ export default function App() {
         {state.screen.name === 'scan' ? <ScanScreen state={state} /> : null}
         {state.screen.name === 'search' ? <SearchScreen state={state} /> : null}
         {state.screen.name === 'print' ? <PrintLabelsScreen state={state} placeId={state.screen.placeId} /> : null}
-        {state.screen.name === 'settings' ? <SettingsScreen state={state} /> : null}
+        {state.screen.name === 'settings' ? <SettingsScreen state={state} update={update} /> : null}
         {state.screen.name === 'lent' ? <LentItemsScreen state={state} /> : null}
         {state.screen.name === 'categories' ? <CategoriesScreen state={state} /> : null}
         {state.screen.name === 'more' ? <MoreScreen state={state} /> : null}

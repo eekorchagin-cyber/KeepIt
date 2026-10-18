@@ -16,6 +16,21 @@ function buildStamp(): string {
 const stamp = buildStamp()
 const appVersion = `${pkg.version}+${stamp}`
 
+/** Необязательное описание выпуска для окна «Что нового». */
+function releaseNote(): { title?: string; notes?: string } {
+  const path = join(root, 'release-note.json')
+  if (!existsSync(path)) return {}
+  try {
+    const raw = JSON.parse(readFileSync(path, 'utf8')) as { title?: unknown; notes?: unknown }
+    return {
+      title: typeof raw.title === 'string' ? raw.title : undefined,
+      notes: typeof raw.notes === 'string' ? raw.notes : undefined,
+    }
+  } catch {
+    return {}
+  }
+}
+
 function pagesVersionPlugin(): Plugin {
   return {
     name: 'pages-version',
@@ -23,7 +38,7 @@ function pagesVersionPlugin(): Plugin {
       this.emitFile({
         type: 'asset',
         fileName: 'version.json',
-        source: `${JSON.stringify({ version: appVersion })}\n`,
+        source: `${JSON.stringify({ version: appVersion, ...releaseNote() })}\n`,
       })
     },
     closeBundle() {

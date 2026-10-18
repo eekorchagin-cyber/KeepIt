@@ -1,4 +1,5 @@
 import { ObjectBadge } from '../components/ObjectBadge'
+import { versionLabel } from '../data/appVersion'
 import { rootObjects } from '../data/icons'
 import type { KeepItState } from '../hooks/useKeepIt'
 import type { ObjectKey } from '../types'
@@ -29,6 +30,7 @@ export function HomeScreen({ state }: { state: KeepItState }) {
           )
         })}
       </div>
+      <p className="muted app-version">KeepIt, версия {versionLabel()}</p>
     </div>
   )
 }
