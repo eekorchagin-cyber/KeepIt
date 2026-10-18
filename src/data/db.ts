@@ -1,11 +1,12 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { AppSettings, Item, Place, StockMove } from '../types'
+import type { AppSettings, Item, ItemName, Place, StockMove } from '../types'
 
 export class KeepItDb extends Dexie {
   places!: EntityTable<Place, 'id'>
   items!: EntityTable<Item, 'id'>
   moves!: EntityTable<StockMove, 'id'>
   settings!: EntityTable<AppSettings, 'id'>
+  itemNames!: EntityTable<ItemName, 'id'>
 
   constructor() {
     super('keepit')
@@ -14,6 +15,9 @@ export class KeepItDb extends Dexie {
       items: 'id, familyId, placeId, name, mode, updatedAt',
       moves: 'id, familyId, itemId, createdAt',
       settings: 'id',
+    })
+    this.version(2).stores({
+      itemNames: 'id, &nameKey',
     })
   }
 }

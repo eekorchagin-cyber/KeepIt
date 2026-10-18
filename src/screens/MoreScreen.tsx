@@ -7,6 +7,7 @@ export function MoreScreen({ state }: { state: KeepItState }) {
   const active = state.settings?.activeObject ?? 'dacha'
   const root = state.places.find((place) => place.type === 'object' && place.objectKey === active)
   const lentCount = state.lentItems().length
+  const uncategorizedCount = state.uncategorizedItems().length
   const activeLabel = objectLabelFromPlaces(active, state.places)
   const fileRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
@@ -90,6 +91,17 @@ export function MoreScreen({ state }: { state: KeepItState }) {
             <span className="muted">Кому отдали и с какой даты</span>
           </span>
           {lentCount > 0 ? <span className="badge warn">{lentCount}</span> : null}
+        </button>
+        <button
+          type="button"
+          className="list-item"
+          onClick={() => state.navigate({ name: 'categorize' })}
+        >
+          <span>
+            <strong>Разбор категорий</strong>
+            <span className="muted">Вещи из импорта без категории</span>
+          </span>
+          {uncategorizedCount > 0 ? <span className="badge warn">{uncategorizedCount}</span> : null}
         </button>
         <button
           type="button"

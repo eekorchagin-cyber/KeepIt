@@ -21,9 +21,18 @@ export function ObjectScreen({ state, objectKey }: { state: KeepItState; objectK
         {root ? <ObjectBadge place={root} size="lg" /> : null}
         <div className="grow">
           <strong className="object-hero-title">{label}</strong>
-          <p className="muted">«+» — помещение · «…» — значок и фон</p>
         </div>
       </div>
+
+      {root ? (
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => state.navigate({ name: 'import-list', placeId: root.id })}
+        >
+          Импорт списка вещей в «{label}»
+        </button>
+      ) : null}
 
       <div className="panel stack">
         {root ? (
@@ -41,7 +50,6 @@ export function ObjectScreen({ state, objectKey }: { state: KeepItState; objectK
         ) : null}
 
         <div className="list">
-          {rooms.length === 0 ? <p className="muted">Помещений пока нет — нажмите «+»</p> : null}
           {rooms.map((room) => (
             <button
               key={room.id}

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { CategoryPicker } from '../components/CategoryPicker'
 import type { KeepItState } from '../hooks/useKeepIt'
-import { UNIT_OPTIONS } from '../data/units'
+import { findName } from '../data/itemNames'
+import { unitForMode, unitOptionsFor } from '../data/units'
 import type { AccountingMode, UnitCode } from '../types'
 
 export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId: string }) {
@@ -24,6 +25,17 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
     )
   }
 
+  function onNameChange(value: string) {
+    setName(value)
+    const known = findName(state.itemNames, value)
+    if (!known?.category || category.trim()) return
+    setCategory(known.category)
+    setSubcategory(known.subcategory)
+    setMode(known.mode)
+    setUnit(unitForMode(known.mode, known.unit))
+    setQuantity(known.mode === 'durable' ? '1' : '0')
+  }
+
   async function save(andAnother: boolean) {
     setBusy(true)
     setError(null)
@@ -42,7 +54,7 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
         mode,
         category,
         subcategory,
-        unit: mode === 'durable' ? 'pcs' : unit,
+        unit: unitForMode(mode, unit),
         quantity: qty,
         note,
       })
@@ -68,7 +80,18 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
 
         <label className="field">
           Название
-          <input value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder="Дрель" />
+          <input
+            value={name}
+            onChange={(e) => onNameChange(e.target.value)}
+            autoFocus
+            placeholder="Дрель"
+            list="item-names"
+          />
+          <datalist id="item-names">
+            {state.itemNames.map((entry) => (
+              <option key={entry.id} value={entry.name} />
+            ))}
+          </datalist>
         </label>
 
         <label className="field">
@@ -78,6 +101,7 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
             onChange={(e) => {
               const next = e.target.value as AccountingMode
               setMode(next)
+              setUnit((current) => unitForMode(next, current))
               setQuantity(next === 'durable' ? '1' : '0')
             }}
           >
@@ -106,23 +130,16 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
               placeholder={mode === 'durable' ? '2' : '0'}
             />
           </label>
-          {mode === 'consumable' ? (
-            <label className="field" style={{ width: 110 }}>
-              Ед.
-              <select value={unit} onChange={(e) => setUnit(e.target.value as UnitCode)}>
-                {UNIT_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : (
-            <label className="field" style={{ width: 110 }}>
-              Ед.
-              <input value="шт" disabled />
-            </label>
-          )}
+          <label className="field" style={{ width: 110 }}>
+            Ед.
+            <select value={unit} onChange={(e) => setUnit(e.target.value as UnitCode)}>
+              {unitOptionsFor(mode).map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
         <label className="field">

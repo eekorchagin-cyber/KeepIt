@@ -6,6 +6,7 @@ import type {
   ObjectKey,
   Place,
   PlaceType,
+  StockMove,
   UnitCode,
 } from '../types'
 import { cloneCategoryTree, normalizeCategoryName } from './categories'
@@ -20,6 +21,9 @@ import {
 } from './placeCodes'
 import { defaultObjectAppearance, type ObjectIconId } from './icons'
 import { buildDraftItems, buildSeedPlaces, defaultSettings } from './seed'
+import { isCountableUnit, unitForMode } from './units'
+import { learnCategory, pruneUnusedNames, upsertNames } from './itemNames'
+import type { DraftItem } from './listImport/parseList'
 
 function normalizeSettings(settings: AppSettings): AppSettings {
   return {
@@ -607,10 +611,45 @@ export async function deletePlace(placeId: string): Promise<void> {
   await db.places.delete(placeId)
 }
 
+/** Удалить коробку или контейнер вместе со всеми вложенными местами и вещами. */
+export async function deletePlaceWithContents(placeId: string): Promise<{ places: number; items: number }> {
+  const place = await getPlace(placeId)
+  if (!place) throw new Error('Место не найдено')
+  if (!movesWithContents(place.type)) {
+    throw new Error('Вместе с содержимым можно удалить только коробку или контейнер')
+  }
+  const all = await db.places.toArray()
+  const placeIds = [place.id, ...descendantIds(place.id, all)]
+  const items = await db.items.where('placeId').anyOf(placeIds).toArray()
+  await removeItemsAndPlaces(items, placeIds)
+  return { places: placeIds.length, items: items.length }
+}
+
+/** Удалить вещи (например, неверно распознанные при импорте) вместе с их движениями. */
+export async function deleteItems(itemIds: string[]): Promise<number> {
+  const items = (await db.items.bulkGet(itemIds)).filter((item): item is Item => Boolean(item))
+  await removeItemsAndPlaces(items, [])
+  return items.length
+}
+
+async function removeItemsAndPlaces(items: Item[], placeIds: string[]): Promise<void> {
+  const itemIds = items.map((item) => item.id)
+  await db.transaction('rw', [db.places, db.items, db.moves, db.itemNames], async () => {
+    if (itemIds.length) {
+      const moveIds = (await db.moves.where('itemId').anyOf(itemIds).toArray()).map((move) => move.id)
+      if (moveIds.length) await db.moves.bulkDelete(moveIds)
+      await db.items.bulkDelete(itemIds)
+    }
+    if (placeIds.length) await db.places.bulkDelete(placeIds)
+    await pruneUnusedNames(items.map((item) => item.name))
+  })
+}
+
 /** Нормализация старых записей без полей передачи. */
 export function normalizeItem(item: Item): Item {
   return {
     ...item,
+    needsCategory: item.needsCategory ?? false,
     lentTo: item.lentTo ?? '',
     lentAt: item.lentAt ?? '',
   }
@@ -704,11 +743,12 @@ export async function addItem(input: {
     mode: input.mode,
     category: input.category.trim() || (input.mode === 'consumable' ? 'Расходные материалы' : 'Прочее'),
     subcategory: input.subcategory?.trim() ?? '',
-    unit: input.unit,
+    unit: unitForMode(input.mode, input.unit),
     quantity: input.quantity,
     note: input.note?.trim() ?? '',
     tags: [],
     needsFill: false,
+    needsCategory: false,
     lentTo: '',
     lentAt: '',
     visibility: 'shared',
@@ -717,6 +757,7 @@ export async function addItem(input: {
     syncStatus: 'pending',
   }
   await db.items.put(item)
+  await learnCategory([item])
   return item
 }
 
@@ -746,8 +787,8 @@ export async function updateItem(
     note = ''
   }
 
-  const unit = patch.mode === 'durable' ? 'pcs' : patch.unit
-  if ((unit === 'pcs' || patch.mode === 'durable') && !Number.isInteger(patch.quantity)) {
+  const unit = unitForMode(patch.mode, patch.unit)
+  if ((isCountableUnit(unit) || patch.mode === 'durable') && !Number.isInteger(patch.quantity)) {
     throw new Error('Для штук укажите целое количество')
   }
 
@@ -763,12 +804,14 @@ export async function updateItem(
     quantity: patch.quantity,
     note,
     needsFill: patch.needsFill ?? item.needsFill,
+    needsCategory: patch.category.trim() ? false : item.needsCategory,
     version: item.version + 1,
     updatedAt: nowIso(),
     syncStatus: 'pending',
   }
 
   await db.items.put(next)
+  await learnCategory([next])
   return normalizeItem(next)
 }
 
@@ -815,7 +858,7 @@ export async function updateItemQuantity(itemId: string, quantity: number, kind:
   const item = await getItem(itemId)
   if (!item) throw new Error('Вещь не найдена')
   if (quantity < 0) throw new Error('Количество не может быть отрицательным')
-  if ((item.unit === 'pcs' || item.mode === 'durable') && !Number.isInteger(quantity)) {
+  if ((isCountableUnit(item.unit) || item.mode === 'durable') && !Number.isInteger(quantity)) {
     throw new Error('Для штук укажите целое количество')
   }
 
@@ -935,4 +978,213 @@ export async function refreshPlaceCodesFromTree(): Promise<void> {
     syncStatus: 'pending' as const,
   }))
   await db.places.bulkPut(updated)
+}
+
+/** Готовый к записи результат импорта: конфликты уже разобраны пользователем. */
+export type ImportPlan = {
+  boxes: Array<{ key: string; name: string; existingPlaceId: string | null }>
+  items: Array<{
+    /** null — вещь кладётся прямо в место импорта */
+    boxKey: string | null
+    draft: DraftItem
+    /** Сложить количество с этой вещью вместо создания новой */
+    mergeIntoId: string | null
+  }>
+}
+
+export type ImportResult = {
+  boxesCreated: number
+  itemsCreated: number
+  itemsMerged: number
+  itemIds: string[]
+}
+
+export type ImportProgress = { done: number; total: number }
+
+const IMPORT_CHUNK = 100
+
+async function putInChunks<T>(rows: T[], put: (chunk: T[]) => Promise<unknown>, step: (count: number) => void) {
+  for (let i = 0; i < rows.length; i += IMPORT_CHUNK) {
+    const chunk = rows.slice(i, i + IMPORT_CHUNK)
+    await put(chunk)
+    step(chunk.length)
+  }
+}
+
+export async function applyImportPlan(
+  placeId: string,
+  plan: ImportPlan,
+  onProgress?: (progress: ImportProgress) => void,
+): Promise<ImportResult> {
+  const settings = await getSettings()
+  const parent = await getPlace(placeId)
+  if (!parent) throw new Error('Место не найдено')
+
+  const at = nowIso()
+  const allPlaces = await db.places.toArray()
+  const parentPath = placePathNames(parent.id, allPlaces)
+  const boxIds = new Map<string, string>()
+  const newPlaces: Place[] = []
+
+  for (const box of plan.boxes) {
+    if (box.existingPlaceId) {
+      boxIds.set(box.key, box.existingPlaceId)
+      continue
+    }
+    const name = box.name.trim()
+    const place: Place = {
+      id: newId(),
+      familyId: settings.familyId,
+      parentId: parent.id,
+      objectKey: parent.objectKey,
+      name,
+      type: 'box',
+      code: formatPlacePathCode([...parentPath, name]),
+      note: '',
+      iconId: '',
+      iconBg: '',
+      archived: false,
+      visibility: 'shared',
+      version: 1,
+      updatedAt: at,
+      syncStatus: 'pending',
+    }
+    boxIds.set(box.key, place.id)
+    newPlaces.push(place)
+  }
+
+  const newItems: Item[] = []
+  const merges = new Map<string, number>()
+  for (const entry of plan.items) {
+    if (entry.mergeIntoId) {
+      merges.set(entry.mergeIntoId, (merges.get(entry.mergeIntoId) ?? 0) + entry.draft.quantity)
+      continue
+    }
+    const targetId = entry.boxKey ? boxIds.get(entry.boxKey) : parent.id
+    if (!targetId) continue
+    const { draft } = entry
+    newItems.push({
+      id: newId(),
+      familyId: settings.familyId,
+      placeId: targetId,
+      name: draft.name.trim(),
+      mode: draft.mode,
+      category: '',
+      subcategory: '',
+      unit: unitForMode(draft.mode, draft.unit),
+      quantity: draft.quantity,
+      note: draft.warning ?? '',
+      tags: [],
+      needsFill: false,
+      needsCategory: true,
+      lentTo: '',
+      lentAt: '',
+      visibility: 'shared',
+      version: 1,
+      updatedAt: at,
+      syncStatus: 'pending',
+    })
+  }
+
+  const mergeTargets = (await db.items.bulkGet([...merges.keys()])).filter(
+    (item): item is Item => Boolean(item),
+  )
+  const mergedItems = mergeTargets.map((item) => ({
+    ...item,
+    quantity: item.quantity + (merges.get(item.id) ?? 0),
+    version: item.version + 1,
+    updatedAt: at,
+    syncStatus: 'pending' as const,
+  }))
+  const moves: StockMove[] = mergeTargets.map((item) => ({
+    id: newId(),
+    familyId: settings.familyId,
+    itemId: item.id,
+    kind: 'in',
+    quantity: merges.get(item.id) ?? 0,
+    unit: item.unit,
+    placeId: item.placeId,
+    note: 'Импорт списка',
+    authorName: settings.displayName,
+    createdAt: at,
+    syncStatus: 'pending',
+  }))
+
+  const drafts = plan.items.map((entry) => entry.draft)
+  const total = newPlaces.length + newItems.length + mergedItems.length + drafts.length
+  let done = 0
+  const step = (count: number) => {
+    done += count
+    onProgress?.({ done, total })
+  }
+  onProgress?.({ done, total })
+
+  await db.transaction('rw', [db.places, db.items, db.moves, db.itemNames], async () => {
+    await putInChunks(newPlaces, (chunk) => db.places.bulkPut(chunk), step)
+    await putInChunks(newItems, (chunk) => db.items.bulkPut(chunk), step)
+    await putInChunks(mergedItems, (chunk) => db.items.bulkPut(chunk), step)
+    if (moves.length) await db.moves.bulkPut(moves)
+    await putInChunks(drafts, (chunk) => upsertNames(chunk), step)
+  })
+
+  return {
+    boxesCreated: newPlaces.length,
+    itemsCreated: newItems.length,
+    itemsMerged: mergedItems.length,
+    itemIds: newItems.map((item) => item.id),
+  }
+}
+
+/** Массово назначить категорию; режим — по желанию. Снимает «без категории» и обучает справочник. */
+export async function assignCategory(
+  itemIds: string[],
+  category: string,
+  subcategory: string,
+  mode?: AccountingMode,
+): Promise<number> {
+  const trimmed = category.trim()
+  if (!trimmed) throw new Error('Выберите категорию')
+  const items = (await db.items.bulkGet(itemIds)).filter((item): item is Item => Boolean(item))
+  const at = nowIso()
+  const updates = items.map((item) => {
+    const nextMode = mode && canSwitchMode(item, mode) ? mode : item.mode
+    return {
+      ...normalizeItem(item),
+      category: trimmed,
+      subcategory: subcategory.trim(),
+      mode: nextMode,
+      unit: unitForMode(nextMode, item.unit),
+      needsCategory: false,
+      version: item.version + 1,
+      updatedAt: at,
+      syncStatus: 'pending' as const,
+    }
+  })
+  await db.transaction('rw', [db.items, db.itemNames], async () => {
+    await db.items.bulkPut(updates)
+    await learnCategory(updates)
+  })
+  return updates.length
+}
+
+/** Постоянное хранение возможно только для целого количества. */
+function canSwitchMode(item: Item, mode: AccountingMode): boolean {
+  return mode === 'consumable' || Number.isInteger(item.quantity)
+}
+
+export async function setItemsMode(itemIds: string[], mode: AccountingMode): Promise<number> {
+  const items = (await db.items.bulkGet(itemIds)).filter((item): item is Item => Boolean(item))
+  const at = nowIso()
+  const updates = items
+    .filter((item) => item.mode !== mode && canSwitchMode(item, mode))
+    .map((item) => ({
+      ...item,
+      mode,
+      unit: unitForMode(mode, item.unit),
+      version: item.version + 1,
+      updatedAt: at,
+      syncStatus: 'pending' as const,
+    }))
+  if (updates.length) await db.items.bulkPut(updates)
+  return updates.length
 }

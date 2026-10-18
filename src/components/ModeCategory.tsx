@@ -12,7 +12,7 @@ export function ModeCategory({
   subcategory?: string
   suffix?: string
 }) {
-  const text = categoryText(category, subcategory)
+  const text = categoryText(category, subcategory) || 'без категории'
   return (
     <span className="mode-category" title={MODE_LABEL[mode]}>
       <img className="mode-icon" src={MODE_ICON[mode]} alt="" />

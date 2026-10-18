@@ -13,7 +13,6 @@ export function HomeScreen({ state }: { state: KeepItState }) {
 
   return (
     <div className="stack screen-fill home-screen">
-      <p className="muted home-lead">Выберите объект хранения · «+» — добавить новый</p>
       <div className="section-grid">
         {roots.map((root) => {
           const active = state.settings?.activeObject === root.objectKey

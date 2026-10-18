@@ -12,7 +12,17 @@ export type PlaceType =
 
 export type AccountingMode = 'durable' | 'consumable'
 
-export type UnitCode = 'pcs' | 'kg' | 'pack'
+export type UnitCode =
+  | 'pcs'
+  | 'set'
+  | 'pair'
+  | 'pack'
+  | 'kg'
+  | 'l'
+  | 'm'
+  | 'roll'
+  | 'bag'
+  | 'bottle'
 
 export type MemberRole = 'admin' | 'member' | 'viewer'
 
@@ -25,6 +35,8 @@ export type Screen =
   | { name: 'object'; objectKey: ObjectKey }
   | { name: 'place'; placeId: string }
   | { name: 'add-item'; placeId: string }
+  | { name: 'import-list'; placeId: string }
+  | { name: 'categorize'; placeId?: string }
   | { name: 'item'; itemId: string }
   | { name: 'edit-item'; itemId: string }
   | { name: 'scan' }
@@ -68,6 +80,8 @@ export type Item = {
   note: string
   tags: string[]
   needsFill: boolean
+  /** Добавлена импортом списка, категория ещё не назначена */
+  needsCategory: boolean
   /** Кому временно передана вещь; пусто — на месте хранения */
   lentTo: string
   /** Дата передачи (YYYY-MM-DD); пусто если не передана */
@@ -90,6 +104,21 @@ export type StockMove = {
   authorName: string
   createdAt: string
   syncStatus: SyncStatus
+}
+
+/** Справочник названий вещей: для автоподстановки и подсказки категории. */
+export type ItemName = {
+  id: string
+  /** Название в нижнем регистре, ё → е, без лишних пробелов */
+  nameKey: string
+  name: string
+  /** Пусто, пока категорию ни разу не назначали */
+  category: string
+  subcategory: string
+  mode: AccountingMode
+  unit: UnitCode
+  usedCount: number
+  updatedAt: string
 }
 
 export type CategoryNode = {

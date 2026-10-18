@@ -3,6 +3,8 @@ import { TopBar } from './components/TopBar'
 import { useKeepIt } from './hooks/useKeepIt'
 import { AddItemScreen } from './screens/AddItemScreen'
 import { CategoriesScreen } from './screens/CategoriesScreen'
+import { CategorizeScreen } from './screens/CategorizeScreen'
+import { ImportListScreen } from './screens/ImportListScreen'
 import { EditItemScreen } from './screens/EditItemScreen'
 import { HomeScreen } from './screens/HomeScreen'
 import { ItemScreen } from './screens/ItemScreen'
@@ -39,6 +41,12 @@ export default function App() {
         ) : null}
         {state.screen.name === 'place' ? <PlaceScreen state={state} placeId={state.screen.placeId} /> : null}
         {state.screen.name === 'add-item' ? <AddItemScreen state={state} placeId={state.screen.placeId} /> : null}
+        {state.screen.name === 'import-list' ? (
+          <ImportListScreen state={state} placeId={state.screen.placeId} />
+        ) : null}
+        {state.screen.name === 'categorize' ? (
+          <CategorizeScreen state={state} placeId={state.screen.placeId} />
+        ) : null}
         {state.screen.name === 'item' ? <ItemScreen state={state} itemId={state.screen.itemId} /> : null}
         {state.screen.name === 'edit-item' ? (
           <EditItemScreen state={state} itemId={state.screen.itemId} />

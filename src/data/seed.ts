@@ -134,6 +134,7 @@ export function buildDraftItems(familyId: string, dachaPlaceId: string): Item[] 
     note: 'Требует заполнения',
     tags: [],
     needsFill: true,
+    needsCategory: false,
     lentTo: '',
     lentAt: '',
     visibility: 'shared',

@@ -62,6 +62,16 @@ export function cloneCategoryTree(tree: CategoryNode[] = DEFAULT_CATEGORY_TREE):
   return tree.map((node) => ({ name: node.name, children: [...node.children] }))
 }
 
+/** Категории и подкатегории по алфавиту (для показа). */
+export function sortCategoryTree(tree: CategoryNode[]): CategoryNode[] {
+  return tree
+    .map((node) => ({
+      name: node.name,
+      children: [...node.children].sort((a, b) => a.localeCompare(b, 'ru')),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+}
+
 export function findCategoryNode(tree: CategoryNode[], name: string): CategoryNode | undefined {
   const q = name.trim().toLowerCase().replaceAll('ё', 'е')
   return tree.find((node) => node.name.toLowerCase().replaceAll('ё', 'е') === q)

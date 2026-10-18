@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CategorySheet } from '../components/CategoryPicker'
 import { ModeCategory } from '../components/ModeCategory'
 import { MoveItemSheet } from '../components/MoveItemSheet'
 import { formatLentDate, isItemLent } from '../data/repository'
@@ -21,6 +22,7 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
   const [busy, setBusy] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
   const [lendOpen, setLendOpen] = useState(false)
+  const [categoryOpen, setCategoryOpen] = useState(false)
   const [lentTo, setLentTo] = useState('')
   const [lentAt, setLentAt] = useState(todayLocal())
 
@@ -75,6 +77,35 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
     }
   }
 
+  async function submitCategory(category: string, subcategory: string) {
+    if (!item) return
+    setCategoryOpen(false)
+    setBusy(true)
+    setError(null)
+    try {
+      await state.assignCategories([item.id], category, subcategory)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function submitDelete() {
+    if (!item) return
+    if (!window.confirm(`Удалить «${item.name}»? Вещь и история её движений будут удалены.`)) return
+    const placeId = item.placeId
+    setBusy(true)
+    setError(null)
+    try {
+      await state.removeItems([item.id])
+      state.jump({ name: 'place', placeId })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка')
+      setBusy(false)
+    }
+  }
+
   async function submitReturn() {
     if (!item) return
     setBusy(true)
@@ -105,6 +136,19 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
             subcategory={item.subcategory}
             suffix={item.needsFill ? ' · требует заполнения' : ''}
           />
+        </div>
+        <div className="chip-row">
+          <button
+            type="button"
+            className="suggest-chip neutral"
+            disabled={busy}
+            onClick={() => {
+              setError(null)
+              setCategoryOpen(true)
+            }}
+          >
+            {item.category ? 'Изменить категорию' : 'Назначить категорию'}
+          </button>
         </div>
 
         {lent ? (
@@ -144,6 +188,9 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
           )}
           <button type="button" className="secondary" onClick={() => setMoveOpen(true)}>
             Перенести
+          </button>
+          <button type="button" className="secondary danger-text" disabled={busy} onClick={() => void submitDelete()}>
+            Удалить
           </button>
           {!item.needsFill && !lent ? (
             <button
@@ -260,6 +307,16 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
       ) : null}
 
       {moveOpen ? <MoveItemSheet state={state} itemId={item.id} onClose={() => setMoveOpen(false)} /> : null}
+
+      {categoryOpen ? (
+        <CategorySheet
+          tree={state.categories}
+          title={`Категория для «${item.name}»`}
+          initialCategory={item.category}
+          onClose={() => setCategoryOpen(false)}
+          onPick={({ category, subcategory }) => void submitCategory(category, subcategory)}
+        />
+      ) : null}
     </div>
   )
 }

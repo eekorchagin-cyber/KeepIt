@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { CategoryPicker } from '../components/CategoryPicker'
 import type { KeepItState } from '../hooks/useKeepIt'
-import { UNIT_OPTIONS } from '../data/units'
+import { unitForMode, unitOptionsFor } from '../data/units'
 import type { AccountingMode, UnitCode } from '../types'
 
 export function EditItemScreen({ state, itemId }: { state: KeepItState; itemId: string }) {
@@ -53,7 +53,7 @@ export function EditItemScreen({ state, itemId }: { state: KeepItState; itemId: 
         mode,
         category,
         subcategory,
-        unit: mode === 'durable' ? 'pcs' : unit,
+        unit: unitForMode(mode, unit),
         quantity: qty,
         note,
         needsFill: false,
@@ -91,6 +91,7 @@ export function EditItemScreen({ state, itemId }: { state: KeepItState; itemId: 
             onChange={(e) => {
               const next = e.target.value as AccountingMode
               setMode(next)
+              setUnit((current) => unitForMode(next, current))
               if (next === 'durable' && (!quantity || quantity === '0')) setQuantity('1')
             }}
           >
@@ -118,23 +119,16 @@ export function EditItemScreen({ state, itemId }: { state: KeepItState; itemId: 
               inputMode={mode === 'durable' ? 'numeric' : 'decimal'}
             />
           </label>
-          {mode === 'consumable' ? (
-            <label className="field" style={{ width: 110 }}>
-              Ед.
-              <select value={unit} onChange={(e) => setUnit(e.target.value as UnitCode)}>
-                {UNIT_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : (
-            <label className="field" style={{ width: 110 }}>
-              Ед.
-              <input value="шт" disabled />
-            </label>
-          )}
+          <label className="field" style={{ width: 110 }}>
+            Ед.
+            <select value={unit} onChange={(e) => setUnit(e.target.value as UnitCode)}>
+              {unitOptionsFor(mode).map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
         <label className="field">

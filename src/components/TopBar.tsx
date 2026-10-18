@@ -27,6 +27,8 @@ function titleFor(state: KeepItState): string {
     return item?.needsFill ? 'Заполнить' : 'Изменить'
   }
   if (screen.name === 'add-item') return 'Новая вещь'
+  if (screen.name === 'import-list') return 'Импорт списка'
+  if (screen.name === 'categorize') return 'Категории вещей'
   if (screen.name === 'scan') return 'Сканер'
   if (screen.name === 'search') return 'Поиск'
   if (screen.name === 'print') return 'Метки'
@@ -88,10 +90,13 @@ export function TopBar({ state }: { state: KeepItState }) {
     if (state.screen.name !== 'place') return
     const placeId = state.screen.placeId
     const place = state.findPlace(placeId)
+    const contents = state.contentsOf(placeId)
+    const withContents = Boolean(place && movesWithContents(place.type)) && contents.places + contents.items > 0
     setBusy(true)
     setActionError(null)
     try {
-      await state.removePlace(placeId)
+      if (withContents) await state.removePlaceWithContents(placeId)
+      else await state.removePlace(placeId)
       closeSheet()
       if (place?.parentId) {
         state.jump({ name: 'place', placeId: place.parentId })
@@ -112,13 +117,7 @@ export function TopBar({ state }: { state: KeepItState }) {
       openSheet('add-object')
       return
     }
-    if (state.screen.name === 'object') {
-      setPlaceName('')
-      setPlaceType('room')
-      openSheet('add-place')
-      return
-    }
-    if (state.screen.name === 'place') {
+    if (state.screen.name === 'object' || state.screen.name === 'place') {
       openSheet('add-choice')
       return
     }
@@ -284,10 +283,7 @@ export function TopBar({ state }: { state: KeepItState }) {
 
       {sheet === 'delete-place' && state.screen.name === 'place' ? (
         <SheetFrame title="Удалить место" onClose={closeSheet}>
-          <p>
-            Удалить «{state.findPlace(state.screen.placeId)?.name ?? 'место'}»? Место должно быть пустым —
-            без вложенных мест и вещей.
-          </p>
+          <DeletePlaceText state={state} placeId={state.screen.placeId} />
           {actionError ? <p className="error">{actionError}</p> : null}
           <button type="button" className="danger" disabled={busy} onClick={() => void submitDeletePlace()}>
             Удалить
@@ -298,18 +294,23 @@ export function TopBar({ state }: { state: KeepItState }) {
         </SheetFrame>
       ) : null}
 
-      {sheet === 'add-choice' && state.screen.name === 'place' ? (
+      {sheet === 'add-choice' && parentIdForAdd() ? (
         <AddChoiceSheet
-          placeId={state.screen.placeId}
+          placeId={parentIdForAdd()!}
+          isObject={state.screen.name === 'object'}
           onClose={closeSheet}
           onAddPlace={() => {
             setPlaceName('')
-            setPlaceType('box')
+            setPlaceType(state.screen.name === 'object' ? 'room' : 'box')
             openSheet('add-place')
           }}
           onAddItem={(placeId) => {
             closeSheet()
             state.navigate({ name: 'add-item', placeId })
+          }}
+          onImportList={(placeId) => {
+            closeSheet()
+            state.navigate({ name: 'import-list', placeId })
           }}
         />
       ) : null}
@@ -365,24 +366,58 @@ export function TopBar({ state }: { state: KeepItState }) {
 
 function AddChoiceSheet({
   placeId,
+  isObject,
   onClose,
   onAddPlace,
   onAddItem,
+  onImportList,
 }: {
   placeId: string
+  isObject: boolean
   onClose: () => void
   onAddPlace: () => void
   onAddItem: (placeId: string) => void
+  onImportList: (placeId: string) => void
 }) {
   return (
     <SheetFrame title="Добавить" onClose={onClose}>
       <button type="button" className="list-item" onClick={onAddPlace}>
-        <strong>Место хранения</strong>
+        <strong>{isObject ? 'Помещение' : 'Место хранения'}</strong>
       </button>
-      <button type="button" className="list-item" onClick={() => onAddItem(placeId)}>
-        <strong>Вещь</strong>
+      {isObject ? null : (
+        <button type="button" className="list-item" onClick={() => onAddItem(placeId)}>
+          <strong>Вещь</strong>
+        </button>
+      )}
+      <button type="button" className="list-item" onClick={() => onImportList(placeId)}>
+        <span>
+          <strong>Импорт списка</strong>
+          <span className="muted">Коробки и вещи из буфера или файла</span>
+        </span>
       </button>
     </SheetFrame>
+  )
+}
+
+function DeletePlaceText({ state, placeId }: { state: KeepItState; placeId: string }) {
+  const place = state.findPlace(placeId)
+  const name = place?.name ?? 'место'
+  const contents = state.contentsOf(placeId)
+  const empty = contents.places + contents.items === 0
+  if (empty) return <p>Удалить пустое место «{name}»?</p>
+  if (place && movesWithContents(place.type)) {
+    return (
+      <p>
+        Удалить «{name}» вместе с содержимым? Будет удалено вещей: {contents.items}
+        {contents.places > 0 ? `, вложенных мест: ${contents.places}` : ''}. Это нельзя отменить.
+      </p>
+    )
+  }
+  return (
+    <p>
+      В «{name}» есть вложенные места или вещи. Сначала перенесите их, затем удалите место. Вместе с
+      содержимым можно удалить только коробку или контейнер.
+    </p>
   )
 }
 

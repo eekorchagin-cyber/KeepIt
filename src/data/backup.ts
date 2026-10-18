@@ -1,6 +1,6 @@
 import { db } from './db'
 import { nowIso } from './ids'
-import type { AppSettings, Item, Place, StockMove } from '../types'
+import type { AppSettings, Item, ItemName, Place, StockMove } from '../types'
 
 export const BACKUP_APP = 'keepit'
 export const BACKUP_FORMAT_VERSION = 1
@@ -13,6 +13,8 @@ export type KeepItBackup = {
   places: Place[]
   items: Item[]
   moves: StockMove[]
+  /** Справочник названий; в старых копиях отсутствует */
+  itemNames?: ItemName[]
 }
 
 export type ImportSummary = {
@@ -33,11 +35,12 @@ function assertArray(value: unknown, label: string): unknown[] {
 
 /** Собирает полный снимок локальной БД. */
 export async function buildBackup(): Promise<KeepItBackup> {
-  const [settings, places, items, moves] = await Promise.all([
+  const [settings, places, items, moves, itemNames] = await Promise.all([
     db.settings.get('settings'),
     db.places.toArray(),
     db.items.toArray(),
     db.moves.toArray(),
+    db.itemNames.toArray(),
   ])
   if (!settings) throw new Error('Настройки не найдены')
 
@@ -49,6 +52,7 @@ export async function buildBackup(): Promise<KeepItBackup> {
     places,
     items,
     moves,
+    itemNames,
   }
 }
 
@@ -82,6 +86,12 @@ export function parseBackup(raw: unknown): KeepItBackup {
       throw new Error('В файле повреждён список движений')
     }
   }
+  const itemNames = raw.itemNames === undefined ? [] : assertArray(raw.itemNames, 'itemNames')
+  for (const entry of itemNames) {
+    if (!isRecord(entry) || typeof entry.id !== 'string' || typeof entry.nameKey !== 'string') {
+      throw new Error('В файле повреждён справочник названий')
+    }
+  }
 
   return {
     app: BACKUP_APP,
@@ -91,6 +101,7 @@ export function parseBackup(raw: unknown): KeepItBackup {
     places: places as Place[],
     items: items as Item[],
     moves: moves as StockMove[],
+    itemNames: itemNames as ItemName[],
   }
 }
 
@@ -122,15 +133,18 @@ export function readFileAsText(file: File): Promise<string> {
 /** Полностью заменяет локальные данные содержимым бэкапа. */
 export async function importBackup(backup: KeepItBackup): Promise<ImportSummary> {
   const data = parseBackup(backup)
-  await db.transaction('rw', db.settings, db.places, db.items, db.moves, async () => {
+  const itemNames = data.itemNames ?? []
+  await db.transaction('rw', [db.settings, db.places, db.items, db.moves, db.itemNames], async () => {
     await db.settings.clear()
     await db.places.clear()
     await db.items.clear()
     await db.moves.clear()
+    await db.itemNames.clear()
     await db.settings.put(data.settings)
     if (data.places.length) await db.places.bulkPut(data.places)
     if (data.items.length) await db.items.bulkPut(data.items)
     if (data.moves.length) await db.moves.bulkPut(data.moves)
+    if (itemNames.length) await db.itemNames.bulkPut(itemNames)
   })
 
   // Проверка, что запись реально попала в IndexedDB (на части WebView иначе тихий сбой).

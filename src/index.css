@@ -164,10 +164,6 @@ label.field {
   gap: 16px;
 }
 
-.home-lead {
-  margin: 0;
-}
-
 .home-brand-icon,
 .brand-mark,
 .list-icon,
@@ -925,9 +921,188 @@ html[data-theme='dark'] .badge.warn {
   }
 }
 
+.import-textarea {
+  min-height: 220px;
+}
+
+.import-block {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.import-block.box {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.import-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 64px 84px;
+  gap: 6px;
+  align-items: center;
+}
+
+.import-row input,
+.import-row select {
+  min-height: 40px;
+  padding: 6px 8px;
+  border-radius: 10px;
+}
+
+.import-row.off input:not([type='checkbox']),
+.import-row.off select {
+  opacity: 0.45;
+}
+
+input[type='checkbox'] {
+  width: 22px;
+  min-height: 22px;
+  height: 22px;
+  padding: 0;
+  accent-color: var(--accent);
+}
+
+.import-warning {
+  grid-column: 2 / -1;
+  font-size: 0.8em;
+  color: #9a6700;
+}
+
+html[data-theme='dark'] .import-warning {
+  color: #f0c674;
+}
+
+.check-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+}
+
+.check-row strong {
+  display: block;
+}
+
+.suggest-chip {
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 0.75em;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+
+.suggest-chip.neutral {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+
+.suggest-chip.danger {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--line));
+  color: var(--danger);
+}
+
+.stack-tight {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+button.ghost.danger-text,
+button.secondary.danger-text {
+  color: var(--danger);
+}
+
+.sticky-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-elevated);
+}
+
+.progress-bar {
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  appearance: none;
+  border: 0;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  accent-color: var(--accent);
+}
+
+.progress-bar::-webkit-progress-bar {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-radius: 999px;
+}
+
+.progress-bar::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+
+.progress-bar::-moz-progress-bar {
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+.split-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.sticky-actions button,
+.sticky-actions button.field-trigger {
+  min-height: 40px;
+}
+
+.sticky-actions button.field-trigger {
+  padding-block: 8px;
+}
+
+.sticky-actions p {
+  margin: 0;
+  font-size: 0.85em;
+}
+
+.place-banner {
+  width: 100%;
+  text-align: left;
+  min-height: auto;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, #b7791f 40%, var(--line));
+  background: color-mix(in srgb, #b7791f 12%, var(--bg-elevated));
+  color: var(--ink);
+}
+
 @media (max-width: 420px) {
   .hero-actions,
   .object-grid {
     grid-template-columns: 1fr;
+  }
+
+  .import-row {
+    grid-template-columns: auto minmax(0, 1fr) 56px 76px;
   }
 }

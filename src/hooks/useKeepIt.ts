@@ -10,6 +10,14 @@ import {
   addPlace,
   addRootObject,
   addSubcategory,
+  applyImportPlan,
+  assignCategory,
+  deleteItems,
+  deletePlaceWithContents,
+  setItemsMode,
+  type ImportPlan,
+  type ImportProgress,
+  type ImportResult,
   createFreePlaces,
   deleteCategory,
   deletePlace,
@@ -31,13 +39,15 @@ import {
   updateRootAppearance,
   updateSettings,
 } from '../data/repository'
-import { cloneCategoryTree } from '../data/categories'
+import { cloneCategoryTree, sortCategoryTree } from '../data/categories'
 import type { ObjectIconId } from '../data/icons'
+import { listItemNames } from '../data/itemNames'
 import type {
   AccountingMode,
   AppSettings,
   CategoryNode,
   Item,
+  ItemName,
   ObjectKey,
   Place,
   PlaceType,
@@ -63,7 +73,10 @@ function fallbackParent(screen: Screen, places: Place[]): Screen {
       return { name: 'object', objectKey: place.objectKey }
     }
     case 'add-item':
+    case 'import-list':
       return { name: 'place', placeId: screen.placeId }
+    case 'categorize':
+      return screen.placeId ? { name: 'place', placeId: screen.placeId } : { name: 'more' }
     case 'item':
       return { name: 'home' }
     case 'edit-item':
@@ -86,6 +99,8 @@ export type KeepItState = {
   places: Place[]
   items: Item[]
   categories: CategoryNode[]
+  /** Справочник названий вещей */
+  itemNames: ItemName[]
   screen: Screen
   error: string | null
   canGoBack: boolean
@@ -154,6 +169,26 @@ export type KeepItState = {
   exportData: () => Promise<void>
   /** Заменить локальные данные текстом JSON-бэкапа (уже прочитанным из файла) */
   importData: (text: string) => Promise<ImportSummary>
+  /** Записать разобранный текстовый список в место */
+  importList: (
+    placeId: string,
+    plan: ImportPlan,
+    onProgress?: (progress: ImportProgress) => void,
+  ) => Promise<ImportResult>
+  assignCategories: (
+    itemIds: string[],
+    category: string,
+    subcategory: string,
+    mode?: AccountingMode,
+  ) => Promise<void>
+  setModeFor: (itemIds: string[], mode: AccountingMode) => Promise<number>
+  /** Вещи без категории (после импорта) по всем объектам; с placeId — в месте и вложенных */
+  uncategorizedItems: (placeId?: string) => Item[]
+  removeItems: (itemIds: string[]) => Promise<number>
+  /** Коробка/контейнер вместе с вложенными местами и вещами */
+  removePlaceWithContents: (placeId: string) => Promise<void>
+  /** Сколько вложенных мест и вещей во всём поддереве места */
+  contentsOf: (placeId: string) => { places: number; items: number }
 }
 
 function applyTheme(theme: ThemeMode, fontScale: number) {
@@ -168,6 +203,7 @@ export function useKeepIt(): KeepItState {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [places, setPlaces] = useState<Place[]>([])
   const [items, setItems] = useState<Item[]>([])
+  const [itemNames, setItemNames] = useState<ItemName[]>([])
   const [screen, setScreenState] = useState<Screen>({ name: 'home' })
   const [history, setHistory] = useState<Screen[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -180,9 +216,11 @@ export function useKeepIt(): KeepItState {
     const nextSettings = await getSettings()
     const nextPlaces = await listPlaces()
     const nextItems = await listItems()
+    const nextNames = await listItemNames()
     setSettings(nextSettings)
     setPlaces(nextPlaces)
     setItems(nextItems)
+    setItemNames(nextNames)
     applyTheme(nextSettings.theme, nextSettings.fontScale)
   }, [])
 
@@ -218,6 +256,11 @@ export function useKeepIt(): KeepItState {
     const placeIds = new Set(places.filter((place) => place.objectKey === objectKey).map((place) => place.id))
     return items.filter((item) => placeIds.has(item.placeId))
   }, [items, places, settings?.activeObject])
+
+  const categories = useMemo(
+    () => sortCategoryTree(settings?.categories?.length ? settings.categories : cloneCategoryTree()),
+    [settings?.categories],
+  )
 
   const lentList = useMemo(
     () =>
@@ -268,7 +311,8 @@ export function useKeepIt(): KeepItState {
     settings,
     places,
     items: visibleItems,
-    categories: settings?.categories?.length ? settings.categories : cloneCategoryTree(),
+    categories,
+    itemNames,
     screen,
     error,
     canGoBack,
@@ -380,14 +424,7 @@ export function useKeepIt(): KeepItState {
       places.filter((place) => place.parentId === placeId).sort((a, b) => a.name.localeCompare(b.name, 'ru')),
     itemsInPlace: (placeId) => visibleItems.filter((item) => item.placeId === placeId),
     stockInSubtree: (placeId) => {
-      const placeIds = new Set<string>()
-      const visit = (id: string) => {
-        placeIds.add(id)
-        for (const child of places.filter((place) => place.parentId === id)) {
-          visit(child.id)
-        }
-      }
-      visit(placeId)
+      const placeIds = subtreeIds(placeId, places)
       // Заготовки «требует заполнения» не участвуют в остатках
       const nested = visibleItems.filter((item) => placeIds.has(item.placeId) && !item.needsFill)
       const total = nested.reduce((sum, item) => sum + item.quantity, 0)
@@ -414,5 +451,53 @@ export function useKeepIt(): KeepItState {
       await refresh()
       return summary
     },
+    importList: async (placeId, plan, onProgress) => {
+      const result = await applyImportPlan(placeId, plan, onProgress)
+      await refresh()
+      return result
+    },
+    assignCategories: async (itemIds, category, subcategory, mode) => {
+      await assignCategory(itemIds, category, subcategory, mode)
+      await refresh()
+    },
+    setModeFor: async (itemIds, mode) => {
+      const changed = await setItemsMode(itemIds, mode)
+      await refresh()
+      return changed
+    },
+    uncategorizedItems: (placeId) => {
+      const pending = items.filter((item) => item.needsCategory)
+      if (!placeId) return pending
+      const placeIds = subtreeIds(placeId, places)
+      return pending.filter((item) => placeIds.has(item.placeId))
+    },
+    removeItems: async (itemIds) => {
+      const removed = await deleteItems(itemIds)
+      await refresh()
+      return removed
+    },
+    removePlaceWithContents: async (placeId) => {
+      await deletePlaceWithContents(placeId)
+      await refresh()
+    },
+    contentsOf: (placeId) => {
+      const placeIds = subtreeIds(placeId, places)
+      return {
+        places: placeIds.size - 1,
+        items: items.filter((item) => placeIds.has(item.placeId)).length,
+      }
+    },
   }
+}
+
+function subtreeIds(placeId: string, places: Place[]): Set<string> {
+  const ids = new Set<string>()
+  const visit = (id: string) => {
+    ids.add(id)
+    for (const child of places.filter((place) => place.parentId === id)) {
+      visit(child.id)
+    }
+  }
+  visit(placeId)
+  return ids
 }
