@@ -34,6 +34,7 @@ import {
   moveItems,
   movePlace,
   movePlaces,
+  normalizeSearch,
   placePath,
   renameCategory,
   renamePlace,
@@ -209,6 +210,8 @@ export type KeepItState = {
   removePlaceWithContents: (placeId: string) => Promise<void>
   /** Несколько мест разом; непустые помещения/полки пропускаются */
   removePlaces: (placeIds: string[]) => Promise<{ places: number; items: number; skipped: string[] }>
+  /** Поиск по названию среди вещей и мест внутри места на любой глубине */
+  searchInPlace: (placeId: string, query: string) => { places: Place[]; items: Item[] }
   /** Группы дублей (одинаковое название в одном месте): в месте и вложенных или во всём активном объекте */
   duplicateGroups: (placeId?: string) => DuplicateGroup[]
   /** Сколько вложенных мест и вещей во всём поддереве места */
@@ -531,6 +534,19 @@ export function useKeepIt(): KeepItState {
       const result = await deletePlaces(placeIds)
       await refresh()
       return result
+    },
+    searchInPlace: (placeId, query) => {
+      const q = normalizeSearch(query)
+      if (!q) return { places: [], items: [] }
+      const placeIds = subtreeIds(placeId, places)
+      return {
+        places: places
+          .filter((place) => place.id !== placeId && placeIds.has(place.id))
+          .filter((place) => normalizeSearch(place.name).includes(q)),
+        items: items
+          .filter((item) => placeIds.has(item.placeId))
+          .filter((item) => normalizeSearch(item.name).includes(q)),
+      }
     },
     duplicateGroups: (placeId) => {
       if (!placeId) return findDuplicateGroups(visibleItems)

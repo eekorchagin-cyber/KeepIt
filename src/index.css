@@ -753,6 +753,17 @@ html[data-theme='dark'] .icon-btn:disabled {
   gap: 8px;
 }
 
+/*
+ * Строки сеток не сжимаются: у .list-item стоит overflow: hidden, из-за чего
+ * в прокручиваемом контейнере с ограниченной высотой строки ужимались и текст налезал.
+ */
+.list,
+.stack,
+.sheet,
+.move-crumbs {
+  grid-auto-rows: max-content;
+}
+
 .list-item {
   display: grid;
   grid-template-columns: 1fr auto;

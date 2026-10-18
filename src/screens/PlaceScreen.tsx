@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { objectLabelFromPlaces } from '../data/icons'
 import { ModeCategory } from '../components/ModeCategory'
@@ -222,48 +222,148 @@ export function PlaceScreen({ state, placeId }: { state: KeepItState; placeId: s
         ) : null}
       </div>
 
-      {children.length > 0 ? <NestedPlaces key={placeId} state={state} places={children} /> : null}
+      <PlaceSearch key={placeId} state={state} place={place}>
+        {children.length > 0 ? <NestedPlaces key={placeId} state={state} places={children} /> : null}
 
-      {items.length > 0 ? (
-        <div className="panel stack">
-          <strong>Содержимое здесь</strong>
-          <div className="list">
-            {items.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className="list-item"
-                onClick={() => state.navigate({ name: 'item', itemId: item.id })}
-              >
-                <span>
-                  <strong>{item.name}</strong>
-                  <span className="muted">
-                    <ModeCategory
-                      mode={item.mode}
-                      category={item.category}
-                      subcategory={item.subcategory}
-                      suffix={
-                        item.needsFill
-                          ? ' · заполнить'
-                          : isItemLent(item)
-                            ? ` · у ${item.lentTo}`
-                            : ''
-                      }
-                    />
+        {items.length > 0 ? (
+          <div className="panel stack">
+            <strong>Содержимое здесь</strong>
+            <div className="list">
+              {items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="list-item"
+                  onClick={() => state.navigate({ name: 'item', itemId: item.id })}
+                >
+                  <span>
+                    <strong>{item.name}</strong>
+                    <span className="muted">
+                      <ModeCategory
+                        mode={item.mode}
+                        category={item.category}
+                        subcategory={item.subcategory}
+                        suffix={
+                          item.needsFill
+                            ? ' · заполнить'
+                            : isItemLent(item)
+                              ? ` · у ${item.lentTo}`
+                              : ''
+                        }
+                      />
+                    </span>
                   </span>
-                </span>
-                <span className={`badge${isItemLent(item) ? ' warn' : ''}`}>
-                  {item.needsFill
-                    ? 'заполнить'
-                    : isItemLent(item)
-                      ? `у ${item.lentTo}`
-                      : formatQty(item.quantity, item.unit)}
-                </span>
-              </button>
-            ))}
+                  <span className={`badge${isItemLent(item) ? ' warn' : ''}`}>
+                    {item.needsFill
+                      ? 'заполнить'
+                      : isItemLent(item)
+                        ? `у ${item.lentTo}`
+                        : formatQty(item.quantity, item.unit)}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </PlaceSearch>
     </div>
+  )
+}
+
+/** Последний запрос в каждом месте — сохраняется при возврате из карточки вещи. */
+const lastQueryByPlace = new Map<string, string>()
+
+/** Поиск по названию внутри места на любой глубине; пока идёт поиск, обычное содержимое скрыто. */
+function PlaceSearch({ state, place, children }: { state: KeepItState; place: Place; children: ReactNode }) {
+  const [query, setQueryState] = useState(() => lastQueryByPlace.get(place.id) ?? '')
+  const contents = state.contentsOf(place.id)
+
+  function setQuery(value: string) {
+    lastQueryByPlace.set(place.id, value)
+    setQueryState(value)
+  }
+
+  if (contents.places + contents.items === 0) return <>{children}</>
+
+  const results = state.searchInPlace(place.id, query)
+  const found = results.places.length + results.items.length
+
+  function relativePath(placeId: string): string {
+    const path = state.pathFor(placeId)
+    const index = path.findIndex((part) => part.id === place.id)
+    const inner = path.slice(index + 1).map((part) => part.name)
+    return inner.length ? inner.join(' / ') : 'здесь'
+  }
+
+  return (
+    <>
+      <div className="panel stack">
+        <div className="row">
+          <input
+            className="grow"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={`Поиск в «${place.name}»`}
+            aria-label={`Поиск по названию в «${place.name}» и вложенных местах`}
+          />
+          {query ? (
+            <button type="button" className="ghost" onClick={() => setQuery('')}>
+              Сбросить
+            </button>
+          ) : null}
+        </div>
+        {query.trim() ? (
+          <span className="muted">
+            {found > 0 ? `Найдено: ${found} (во всех вложенных местах)` : 'Ничего не найдено'}
+          </span>
+        ) : null}
+      </div>
+
+      {query.trim() ? (
+        found > 0 ? (
+          <div className="panel stack">
+            <div className="list">
+              {results.places.map((entry) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  className="list-item"
+                  onClick={() => state.navigate({ name: 'place', placeId: entry.id })}
+                >
+                  <span className="stack-tight">
+                    <strong>{entry.name}</strong>
+                    <span className="muted">
+                      Место · {entry.parentId ? relativePath(entry.parentId) : ''}
+                    </span>
+                  </span>
+                  <span className="badge">{formatStock(state.stockInSubtree(entry.id))}</span>
+                </button>
+              ))}
+              {results.items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="list-item"
+                  onClick={() => state.navigate({ name: 'item', itemId: item.id })}
+                >
+                  <span className="stack-tight">
+                    <strong>{item.name}</strong>
+                    <span className="muted">
+                      <ModeCategory mode={item.mode} category={item.category} subcategory={item.subcategory} />
+                    </span>
+                    <span className="muted">{relativePath(item.placeId)}</span>
+                  </span>
+                  <span className={`badge${isItemLent(item) ? ' warn' : ''}`}>
+                    {isItemLent(item) ? `у ${item.lentTo}` : formatQty(item.quantity, item.unit)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null
+      ) : (
+        children
+      )}
+    </>
   )
 }
