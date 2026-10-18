@@ -17,6 +17,8 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** Подсказки видны, только пока набирают название: после ввода — да, после ухода из поля или выбора — нет */
+  const [typingName, setTypingName] = useState(false)
 
   if (!place) {
     return (
@@ -29,7 +31,7 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
   // Подсказки из каталога — только когда начали вводить; сначала названия, которые начинаются с введённого
   const query = normalizeSearch(name)
   const suggestions =
-    query && !findName(state.itemNames, name)
+    typingName && query && !findName(state.itemNames, name)
       ? state.itemNames
           .filter((entry) => {
             const key = normalizeSearch(entry.name)
@@ -98,7 +100,17 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
 
         <label className="field">
           Название
-          <input value={name} onChange={(e) => onNameChange(e.target.value)} placeholder="Дрель" autoComplete="off" />
+          <input
+            className="name-input"
+            value={name}
+            onChange={(e) => {
+              setTypingName(true)
+              onNameChange(e.target.value)
+            }}
+            onBlur={() => setTypingName(false)}
+            placeholder="Дрель"
+            autoComplete="off"
+          />
         </label>
         {suggestions.length > 0 ? (
           <div className="name-suggest" role="listbox" aria-label="Названия из каталога">
@@ -109,7 +121,12 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
                 className="name-suggest-row"
                 role="option"
                 aria-selected={false}
-                onClick={() => onNameChange(entry.name)}
+                // Не уводим фокус из поля до нажатия, иначе подсказка исчезнет раньше выбора
+                onPointerDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  onNameChange(entry.name)
+                  setTypingName(false)
+                }}
               >
                 <span>{entry.name}</span>
                 {entry.category ? (
