@@ -8,6 +8,7 @@ export function MoreScreen({ state }: { state: KeepItState }) {
   const root = state.places.find((place) => place.type === 'object' && place.objectKey === active)
   const lentCount = state.lentItems().length
   const uncategorizedCount = state.uncategorizedItems().length
+  const duplicateCount = state.duplicateGroups().length
   const activeLabel = objectLabelFromPlaces(active, state.places)
   const fileRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
@@ -91,6 +92,17 @@ export function MoreScreen({ state }: { state: KeepItState }) {
             <span className="muted">Кому отдали и с какой даты</span>
           </span>
           {lentCount > 0 ? <span className="badge warn">{lentCount}</span> : null}
+        </button>
+        <button
+          type="button"
+          className="list-item"
+          onClick={() => state.navigate({ name: 'duplicates' })}
+        >
+          <span>
+            <strong>Поиск дублей</strong>
+            <span className="muted">Одинаковые вещи в одном месте — суммировать или удалить</span>
+          </span>
+          {duplicateCount > 0 ? <span className="badge warn">{duplicateCount}</span> : null}
         </button>
         <button
           type="button"

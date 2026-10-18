@@ -3,18 +3,10 @@ import { MoveItemSheet, MovePlaceSheet } from './MoveItemSheet'
 import { ObjectAppearanceSheet, appearanceFromPlace } from './ObjectAppearanceSheet'
 import { helpForScreen } from '../data/help'
 import { defaultObjectAppearance, objectLabelFromPlaces } from '../data/icons'
+import { PLACE_TYPES } from '../data/placeTypes'
 import { movesWithContents } from '../data/repository'
 import type { KeepItState } from '../hooks/useKeepIt'
 import type { PlaceType } from '../types'
-
-const PLACE_TYPES: Array<{ value: PlaceType; label: string }> = [
-  { value: 'room', label: 'Помещение' },
-  { value: 'cabinet', label: 'Шкаф / стеллаж' },
-  { value: 'shelf', label: 'Полка / ящик' },
-  { value: 'box', label: 'Коробка' },
-  { value: 'container', label: 'Контейнер' },
-  { value: 'other', label: 'Другое' },
-]
 
 function titleFor(state: KeepItState): string {
   const screen = state.screen
@@ -28,7 +20,8 @@ function titleFor(state: KeepItState): string {
   }
   if (screen.name === 'add-item') return 'Новая вещь'
   if (screen.name === 'import-list') return 'Импорт списка'
-  if (screen.name === 'gather-items') return 'Перенос вещей'
+  if (screen.name === 'gather-items') return 'Перенести сюда'
+  if (screen.name === 'duplicates') return 'Дубли вещей'
   if (screen.name === 'categorize') return 'Категории вещей'
   if (screen.name === 'scan') return 'Сканер'
   if (screen.name === 'search') return 'Поиск'

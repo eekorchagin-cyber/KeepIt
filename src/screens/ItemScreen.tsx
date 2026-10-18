@@ -5,6 +5,8 @@ import { MoveItemSheet } from '../components/MoveItemSheet'
 import { formatLentDate, isItemLent } from '../data/repository'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { formatQty } from '../data/units'
+import { PLACE_TYPES } from '../data/placeTypes'
+import type { PlaceType } from '../types'
 
 function todayLocal(): string {
   const d = new Date()
@@ -23,6 +25,9 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
   const [moveOpen, setMoveOpen] = useState(false)
   const [lendOpen, setLendOpen] = useState(false)
   const [categoryOpen, setCategoryOpen] = useState(false)
+  const [placeOpen, setPlaceOpen] = useState(false)
+  const [placeName, setPlaceName] = useState('')
+  const [placeType, setPlaceType] = useState<PlaceType>('box')
   const [lentTo, setLentTo] = useState('')
   const [lentAt, setLentAt] = useState(todayLocal())
 
@@ -73,6 +78,20 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка')
     } finally {
+      setBusy(false)
+    }
+  }
+
+  async function submitToPlace() {
+    if (!item) return
+    setBusy(true)
+    setError(null)
+    try {
+      const created = await state.itemToPlace(item.id, { name: placeName, type: placeType })
+      setPlaceOpen(false)
+      state.jump({ name: 'place', placeId: created.id })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка')
       setBusy(false)
     }
   }
@@ -189,6 +208,21 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
           <button type="button" className="secondary" onClick={() => setMoveOpen(true)}>
             Перенести
           </button>
+          {!lent ? (
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy}
+              onClick={() => {
+                setPlaceName(item.name)
+                setPlaceType('box')
+                setError(null)
+                setPlaceOpen(true)
+              }}
+            >
+              Сделать местом хранения
+            </button>
+          ) : null}
           <button type="button" className="secondary danger-text" disabled={busy} onClick={() => void submitDelete()}>
             Удалить
           </button>
@@ -307,6 +341,47 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
       ) : null}
 
       {moveOpen ? <MoveItemSheet state={state} itemId={item.id} onClose={() => setMoveOpen(false)} /> : null}
+
+      {placeOpen ? (
+        <div className="sheet-backdrop" onClick={() => setPlaceOpen(false)} role="presentation">
+          <div className="sheet" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal>
+            <div className="row">
+              <strong className="grow">Сделать местом хранения</strong>
+              <button type="button" className="icon-btn" onClick={() => setPlaceOpen(false)} aria-label="Закрыть">
+                ×
+              </button>
+            </div>
+            <div className="stack">
+              <p className="muted">
+                Вместо вещи «{item.name}» в «{place?.name ?? 'месте'}» появится место хранения — в него можно
+                класть вещи и печатать для него метку. Сама вещь будет удалена из учёта.
+                {item.quantity > 1 ? ` Было ${formatQty(item.quantity, item.unit)} — создаётся одно место.` : ''}
+              </p>
+              <label className="field">
+                Название места
+                <input value={placeName} onChange={(e) => setPlaceName(e.target.value)} autoFocus />
+              </label>
+              <label className="field">
+                Тип
+                <select value={placeType} onChange={(e) => setPlaceType(e.target.value as PlaceType)}>
+                  {PLACE_TYPES.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {error ? <p className="error">{error}</p> : null}
+              <button type="button" disabled={busy || !placeName.trim()} onClick={() => void submitToPlace()}>
+                Сделать местом
+              </button>
+              <button type="button" className="secondary" disabled={busy} onClick={() => setPlaceOpen(false)}>
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {categoryOpen ? (
         <CategorySheet

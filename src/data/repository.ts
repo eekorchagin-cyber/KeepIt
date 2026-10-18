@@ -656,6 +656,110 @@ export async function deletePlaces(
   return { places: ids.length, items: items.length, skipped }
 }
 
+/**
+ * Превратить вещь в место хранения (например, «Банка со свечными ключами» → коробка):
+ * место создаётся там, где лежала вещь, сама вещь удаляется.
+ */
+export async function convertItemToPlace(
+  itemId: string,
+  input: { name: string; type: PlaceType },
+): Promise<Place> {
+  const item = await getItem(itemId)
+  if (!item) throw new Error('Вещь не найдена')
+  if (isItemLent(item)) throw new Error('Вещь передана на время — сначала отметьте возврат')
+  const parent = await getPlace(item.placeId)
+  if (!parent) throw new Error('Место вещи не найдено')
+  const name = input.name.trim()
+  if (!name) throw new Error('Укажите название места')
+  if (input.type === 'object') throw new Error('Выберите тип места')
+
+  const settings = await getSettings()
+  const all = await db.places.toArray()
+  const place: Place = {
+    id: newId(),
+    familyId: settings.familyId,
+    parentId: parent.id,
+    objectKey: parent.objectKey,
+    name,
+    type: input.type,
+    code: formatPlacePathCode([...placePathNames(parent.id, all), name]),
+    note: item.note,
+    iconId: '',
+    iconBg: '',
+    archived: false,
+    visibility: 'shared',
+    version: 1,
+    updatedAt: nowIso(),
+    syncStatus: 'pending',
+  }
+
+  await db.transaction('rw', [db.places, db.items, db.moves, db.itemNames], async () => {
+    await db.places.put(place)
+    const moveIds = (await db.moves.where('itemId').equals(item.id).toArray()).map((move) => move.id)
+    if (moveIds.length) await db.moves.bulkDelete(moveIds)
+    await db.items.delete(item.id)
+    await pruneUnusedNames([item.name])
+  })
+  return place
+}
+
+/**
+ * Объединить дубли в одну вещь `keepId`.
+ * sum — сложить количество копий с той же единицей (их удалить), копии в других единицах остаются;
+ * delete — удалить все копии, количество оставшейся вещи не меняется.
+ */
+export async function mergeDuplicates(
+  keepId: string,
+  duplicateIds: string[],
+  mode: 'sum' | 'delete',
+): Promise<{ removed: number; keptSeparate: number; quantity: number }> {
+  const keeper = await getItem(keepId)
+  if (!keeper) throw new Error('Вещь не найдена')
+  const duplicates = (await db.items.bulkGet(duplicateIds.filter((id) => id !== keepId))).filter(
+    (item): item is Item => Boolean(item),
+  )
+  const toRemove = mode === 'sum' ? duplicates.filter((item) => item.unit === keeper.unit) : duplicates
+  const keptSeparate = duplicates.length - toRemove.length
+  const added = mode === 'sum' ? toRemove.reduce((sum, item) => sum + item.quantity, 0) : 0
+
+  const donor = duplicates.find((item) => item.category.trim() && !item.needsCategory)
+  const takeCategory = (!keeper.category.trim() || keeper.needsCategory) && donor
+  const settings = await getSettings()
+  const at = nowIso()
+  const next: Item = {
+    ...keeper,
+    quantity: keeper.quantity + added,
+    category: takeCategory ? donor.category : keeper.category,
+    subcategory: takeCategory ? donor.subcategory : keeper.subcategory,
+    needsCategory: takeCategory ? false : keeper.needsCategory,
+    note: keeper.note || duplicates.find((item) => item.note.trim())?.note || '',
+    version: keeper.version + 1,
+    updatedAt: at,
+    syncStatus: 'pending',
+  }
+
+  await db.transaction('rw', [db.items, db.moves, db.itemNames, db.places], async () => {
+    await db.items.put(next)
+    if (added > 0) {
+      await db.moves.put({
+        id: newId(),
+        familyId: settings.familyId,
+        itemId: keeper.id,
+        kind: 'adjust',
+        quantity: added,
+        unit: keeper.unit,
+        placeId: keeper.placeId,
+        note: `Объединение дублей (+${added})`,
+        authorName: settings.displayName,
+        createdAt: at,
+        syncStatus: 'pending',
+      })
+    }
+  })
+  await removeItemsAndPlaces(toRemove, [])
+  return { removed: toRemove.length, keptSeparate, quantity: next.quantity }
+}
+
 /** Удалить вещи (например, неверно распознанные при импорте) вместе с их движениями. */
 export async function deleteItems(itemIds: string[]): Promise<number> {
   const items = (await db.items.bulkGet(itemIds)).filter((item): item is Item => Boolean(item))
@@ -957,6 +1061,16 @@ export async function moveItem(itemId: string, placeId: string): Promise<Item> {
   }
   await db.items.put(next)
   return next
+}
+
+/** Перенести несколько мест (коробки — с содержимым) под одного родителя. */
+export async function movePlaces(placeIds: string[], newParentId: string): Promise<number> {
+  let moved = 0
+  for (const id of placeIds) {
+    await movePlace(id, newParentId)
+    moved += 1
+  }
+  return moved
 }
 
 /** Перенести несколько вещей в одно место (расходники с тем же названием складываются). */

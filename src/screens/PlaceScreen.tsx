@@ -151,10 +151,7 @@ export function PlaceScreen({ state, placeId }: { state: KeepItState; placeId: s
   const children = state.childPlaces(placeId)
   const items = state.itemsInPlace(placeId)
   const uncategorized = state.uncategorizedItems(placeId).length
-  const upstreamItems = path
-    .slice(0, -1)
-    .reduce((sum, entry) => sum + state.itemsInPlace(entry.id).length, 0)
-
+  const duplicates = state.duplicateGroups(placeId).length
   if (!place) {
     return (
       <div className="panel stack">
@@ -196,13 +193,21 @@ export function PlaceScreen({ state, placeId }: { state: KeepItState; placeId: s
         >
           Импорт списка вещей
         </button>
-        {upstreamItems > 0 ? (
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => state.navigate({ name: 'gather-items', placeId })}
+        >
+          Перенести сюда вещи или коробки
+        </button>
+        {duplicates > 0 ? (
           <button
             type="button"
-            className="secondary"
-            onClick={() => state.navigate({ name: 'gather-items', placeId })}
+            className="place-banner"
+            onClick={() => state.navigate({ name: 'duplicates', placeId })}
           >
-            Перенести сюда вещи ({upstreamItems} выше по пути)
+            <strong>Дубли вещей: {duplicates}</strong>
+            <span className="muted"> — суммировать или удалить</span>
           </button>
         ) : null}
         {uncategorized > 0 ? (

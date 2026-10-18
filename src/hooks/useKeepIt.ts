@@ -12,6 +12,8 @@ import {
   addSubcategory,
   applyImportPlan,
   assignCategory,
+  convertItemToPlace,
+  mergeDuplicates,
   deleteItems,
   deletePlaceWithContents,
   deletePlaces,
@@ -31,6 +33,7 @@ import {
   moveItem,
   moveItems,
   movePlace,
+  movePlaces,
   placePath,
   renameCategory,
   renamePlace,
@@ -43,6 +46,7 @@ import {
 } from '../data/repository'
 import { cloneCategoryTree, sortCategoryTree } from '../data/categories'
 import type { ObjectIconId } from '../data/icons'
+import { findDuplicateGroups, type DuplicateGroup } from '../data/duplicates'
 import { listItemNames } from '../data/itemNames'
 import type {
   AccountingMode,
@@ -79,6 +83,7 @@ function fallbackParent(screen: Screen, places: Place[]): Screen {
     case 'gather-items':
       return { name: 'place', placeId: screen.placeId }
     case 'categorize':
+    case 'duplicates':
       return screen.placeId ? { name: 'place', placeId: screen.placeId } : { name: 'more' }
     case 'item':
       return { name: 'home' }
@@ -157,6 +162,8 @@ export type KeepItState = {
   relocateItem: (itemId: string, placeId: string) => Promise<Item>
   /** Перенести несколько вещей в одно место */
   relocateItems: (itemIds: string[], placeId: string) => Promise<number>
+  /** Перенести несколько мест (коробки — с содержимым) в одно место */
+  relocatePlaces: (placeIds: string[], parentId: string) => Promise<number>
   lendOutItem: (itemId: string, lentTo: string, lentAt: string) => Promise<Item>
   returnFromLend: (itemId: string) => Promise<Item>
   makeFreeLabels: (parentId: string, count: number) => Promise<Place[]>
@@ -190,10 +197,20 @@ export type KeepItState = {
   /** Вещи без категории (после импорта) по всем объектам; с placeId — в месте и вложенных */
   uncategorizedItems: (placeId?: string) => Item[]
   removeItems: (itemIds: string[]) => Promise<number>
+  /** Объединить дубли: sum — сложить количество, delete — удалить копии */
+  mergeItemDuplicates: (
+    keepId: string,
+    duplicateIds: string[],
+    mode: 'sum' | 'delete',
+  ) => Promise<{ removed: number; keptSeparate: number; quantity: number }>
+  /** Вещь становится местом хранения там же, где лежала */
+  itemToPlace: (itemId: string, input: { name: string; type: PlaceType }) => Promise<Place>
   /** Коробка/контейнер вместе с вложенными местами и вещами */
   removePlaceWithContents: (placeId: string) => Promise<void>
   /** Несколько мест разом; непустые помещения/полки пропускаются */
   removePlaces: (placeIds: string[]) => Promise<{ places: number; items: number; skipped: string[] }>
+  /** Группы дублей (одинаковое название в одном месте): в месте и вложенных или во всём активном объекте */
+  duplicateGroups: (placeId?: string) => DuplicateGroup[]
   /** Сколько вложенных мест и вещей во всём поддереве места */
   contentsOf: (placeId: string) => { places: number; items: number }
 }
@@ -410,6 +427,13 @@ export function useKeepIt(): KeepItState {
       await refresh()
       return moved
     },
+    relocatePlaces: async (placeIds, parentId) => {
+      try {
+        return await movePlaces(placeIds, parentId)
+      } finally {
+        await refresh()
+      }
+    },
     relocateItem: async (itemId, placeId) => {
       const moved = await moveItem(itemId, placeId)
       await refresh()
@@ -489,6 +513,16 @@ export function useKeepIt(): KeepItState {
       await refresh()
       return removed
     },
+    mergeItemDuplicates: async (keepId, duplicateIds, mode) => {
+      const result = await mergeDuplicates(keepId, duplicateIds, mode)
+      await refresh()
+      return result
+    },
+    itemToPlace: async (itemId, input) => {
+      const place = await convertItemToPlace(itemId, input)
+      await refresh()
+      return place
+    },
     removePlaceWithContents: async (placeId) => {
       await deletePlaceWithContents(placeId)
       await refresh()
@@ -497,6 +531,11 @@ export function useKeepIt(): KeepItState {
       const result = await deletePlaces(placeIds)
       await refresh()
       return result
+    },
+    duplicateGroups: (placeId) => {
+      if (!placeId) return findDuplicateGroups(visibleItems)
+      const placeIds = subtreeIds(placeId, places)
+      return findDuplicateGroups(items.filter((item) => placeIds.has(item.placeId)))
     },
     contentsOf: (placeId) => {
       const placeIds = subtreeIds(placeId, places)

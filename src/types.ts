@@ -37,6 +37,7 @@ export type Screen =
   | { name: 'add-item'; placeId: string }
   | { name: 'import-list'; placeId: string }
   | { name: 'gather-items'; placeId: string }
+  | { name: 'duplicates'; placeId?: string }
   | { name: 'categorize'; placeId?: string }
   | { name: 'item'; itemId: string }
   | { name: 'edit-item'; itemId: string }
