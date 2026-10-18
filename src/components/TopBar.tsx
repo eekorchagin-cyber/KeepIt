@@ -22,6 +22,7 @@ function titleFor(state: KeepItState): string {
   if (screen.name === 'import-list') return 'Импорт списка'
   if (screen.name === 'gather-items') return 'Перенести сюда'
   if (screen.name === 'duplicates') return 'Дубли вещей'
+  if (screen.name === 'reminders') return 'Напоминания'
   if (screen.name === 'categorize') return 'Категории вещей'
   if (screen.name === 'scan') return 'Сканер'
   if (screen.name === 'search') return 'Поиск'

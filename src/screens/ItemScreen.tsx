@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CategorySheet } from '../components/CategoryPicker'
 import { ModeCategory } from '../components/ModeCategory'
+import { ServicePanel } from '../components/ServicePanel'
 import { MoveItemSheet } from '../components/MoveItemSheet'
 import { formatLentDate, isItemLent } from '../data/repository'
 import type { KeepItState } from '../hooks/useKeepIt'
@@ -262,6 +263,8 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
           ) : null}
         </div>
       </div>
+
+      <ServicePanel key={item.id} state={state} item={item} />
 
       {!item.needsFill ? (
         <div className="panel stack">

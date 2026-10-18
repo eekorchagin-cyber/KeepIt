@@ -1050,6 +1050,35 @@ button.secondary.danger-text {
   background: var(--bg-elevated);
 }
 
+strong.inline {
+  display: inline;
+}
+
+.check-row.reminder-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+button.reminder-open {
+  min-height: auto;
+  padding: 0;
+  text-align: left;
+  color: var(--ink);
+}
+
+.badge.service-overdue {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+
+.badge.service-soon {
+  background: color-mix(in srgb, #b7791f 18%, transparent);
+  color: #9a6700;
+}
+
+html[data-theme='dark'] .badge.service-soon {
+  color: #f0c674;
+}
+
 .update-banner {
   display: grid;
   gap: 8px;

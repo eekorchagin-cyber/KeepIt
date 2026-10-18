@@ -38,6 +38,7 @@ export type Screen =
   | { name: 'import-list'; placeId: string }
   | { name: 'gather-items'; placeId: string }
   | { name: 'duplicates'; placeId?: string }
+  | { name: 'reminders' }
   | { name: 'categorize'; placeId?: string }
   | { name: 'item'; itemId: string }
   | { name: 'edit-item'; itemId: string }
@@ -88,6 +89,12 @@ export type Item = {
   lentTo: string
   /** Дата передачи (YYYY-MM-DD); пусто если не передана */
   lentAt: string
+  /** Последнее техническое обслуживание (YYYY-MM-DD); пусто — не проводилось или неизвестно */
+  serviceLastAt?: string
+  /** Следующее ТО (YYYY-MM-DD); по нему строятся напоминания */
+  serviceNextAt?: string
+  /** Интервал ТО в месяцах; 0 — следующая дата задаётся вручную */
+  serviceIntervalMonths?: number
   visibility: 'shared' | 'personal'
   version: number
   updatedAt: string

@@ -11,7 +11,7 @@ import {
 import type { ThemeMode } from '../types'
 
 const NOTIFY_TEXT: Record<NotifyStatus, string> = {
-  on: 'Включены: когда выйдет новая версия, телефон покажет уведомление, а на значке появится метка.',
+  on: 'Включены: телефон сообщит о новой версии программы и раз в день — о предстоящем или просроченном ТО оборудования.',
   off: 'Выключены. Новая версия всё равно появится плашкой внутри программы.',
   denied:
     'Запрещены в настройках телефона. Разрешите уведомления для KeepIt (или для браузера) в системных настройках.',
@@ -79,7 +79,7 @@ export function SettingsScreen({ state, update }: { state: KeepItState; update: 
       </div>
 
       <div className="panel stack">
-        <strong>Уведомления об обновлениях</strong>
+        <strong>Уведомления: обновления и ТО</strong>
         <p className="muted">{NOTIFY_TEXT[status]}</p>
         {status === 'on' || status === 'off' ? (
           <button

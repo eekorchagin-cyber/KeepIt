@@ -35,6 +35,8 @@ import {
   movePlace,
   movePlaces,
   normalizeSearch,
+  markServiceDone,
+  updateItemService,
   placePath,
   renameCategory,
   renamePlace,
@@ -79,6 +81,8 @@ function fallbackParent(screen: Screen, places: Place[]): Screen {
       if (place.parentId) return { name: 'place', placeId: place.parentId }
       return { name: 'object', objectKey: place.objectKey }
     }
+    case 'reminders':
+      return { name: 'more' }
     case 'add-item':
     case 'import-list':
     case 'gather-items':
@@ -161,6 +165,10 @@ export type KeepItState = {
     needsFill?: boolean
   }) => Promise<Item>
   relocateItem: (itemId: string, placeId: string) => Promise<Item>
+  /** Даты ТО: последнее, следующее, интервал в месяцах */
+  saveService: (itemId: string, patch: { lastAt: string; nextAt: string; intervalMonths: number }) => Promise<Item>
+  /** ТО проведено в указанную дату (следующее — по интервалу) */
+  serviceDone: (itemId: string, date: string) => Promise<Item>
   /** Перенести несколько вещей в одно место */
   relocateItems: (itemIds: string[], placeId: string) => Promise<number>
   /** Перенести несколько мест (коробки — с содержимым) в одно место */
@@ -210,6 +218,8 @@ export type KeepItState = {
   removePlaceWithContents: (placeId: string) => Promise<void>
   /** Несколько мест разом; непустые помещения/полки пропускаются */
   removePlaces: (placeIds: string[]) => Promise<{ places: number; items: number; skipped: string[] }>
+  /** Вещи с запланированным ТО во всех объектах — для напоминаний */
+  serviceItems: () => Item[]
   /** Поиск по названию среди вещей и мест внутри места на любой глубине */
   searchInPlace: (placeId: string, query: string) => { places: Place[]; items: Item[] }
   /** Группы дублей (одинаковое название в одном месте или в месте и вложенном): в месте и вложенных или во всём активном объекте */
@@ -437,6 +447,16 @@ export function useKeepIt(): KeepItState {
         await refresh()
       }
     },
+    saveService: async (itemId, patch) => {
+      const next = await updateItemService(itemId, patch)
+      await refresh()
+      return next
+    },
+    serviceDone: async (itemId, date) => {
+      const next = await markServiceDone(itemId, date)
+      await refresh()
+      return next
+    },
     relocateItem: async (itemId, placeId) => {
       const moved = await moveItem(itemId, placeId)
       await refresh()
@@ -535,6 +555,10 @@ export function useKeepIt(): KeepItState {
       await refresh()
       return result
     },
+    serviceItems: () =>
+      items
+        .filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item.serviceNextAt ?? ''))
+        .sort((a, b) => (a.serviceNextAt ?? '').localeCompare(b.serviceNextAt ?? '')),
     searchInPlace: (placeId, query) => {
       const q = normalizeSearch(query)
       if (!q) return { places: [], items: [] }

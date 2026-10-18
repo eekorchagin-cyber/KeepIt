@@ -22,6 +22,7 @@ import {
 import { defaultObjectAppearance, type ObjectIconId } from './icons'
 import { buildDraftItems, buildSeedPlaces, defaultSettings } from './seed'
 import { isCountableUnit, unitForMode } from './units'
+import { addMonths } from './service'
 import { learnCategory, pruneUnusedNames, upsertNames } from './itemNames'
 import type { DraftItem } from './listImport/parseList'
 
@@ -787,6 +788,9 @@ export function normalizeItem(item: Item): Item {
     needsCategory: item.needsCategory ?? false,
     lentTo: item.lentTo ?? '',
     lentAt: item.lentAt ?? '',
+    serviceLastAt: item.serviceLastAt ?? '',
+    serviceNextAt: item.serviceNextAt ?? '',
+    serviceIntervalMonths: item.serviceIntervalMonths ?? 0,
   }
 }
 
@@ -986,6 +990,46 @@ export async function returnLentItem(itemId: string): Promise<Item> {
   }
   await db.items.put(next)
   return next
+}
+
+/** Сохранить даты ТО: последнее, следующее и интервал (0 — следующее вручную). */
+export async function updateItemService(
+  itemId: string,
+  patch: { lastAt: string; nextAt: string; intervalMonths: number },
+): Promise<Item> {
+  const item = await getItem(itemId)
+  if (!item) throw new Error('Вещь не найдена')
+  const check = (value: string, label: string) => {
+    if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error(`Некорректная дата: ${label}`)
+  }
+  check(patch.lastAt, 'последнее ТО')
+  check(patch.nextAt, 'следующее ТО')
+  if (patch.lastAt && patch.nextAt && patch.nextAt < patch.lastAt) {
+    throw new Error('Следующее ТО не может быть раньше последнего')
+  }
+  const next: Item = {
+    ...item,
+    serviceLastAt: patch.lastAt,
+    serviceNextAt: patch.nextAt,
+    serviceIntervalMonths: Math.max(0, Math.round(patch.intervalMonths)),
+    version: item.version + 1,
+    updatedAt: nowIso(),
+    syncStatus: 'pending',
+  }
+  await db.items.put(next)
+  return normalizeItem(next)
+}
+
+/** Отметить проведённое ТО: дата последнего = date, следующее — по интервалу (если задан). */
+export async function markServiceDone(itemId: string, date: string): Promise<Item> {
+  const item = await getItem(itemId)
+  if (!item) throw new Error('Вещь не найдена')
+  const interval = item.serviceIntervalMonths ?? 0
+  return updateItemService(itemId, {
+    lastAt: date,
+    nextAt: interval > 0 ? addMonths(date, interval) : '',
+    intervalMonths: interval,
+  })
 }
 
 export async function updateItemQuantity(itemId: string, quantity: number, kind: 'in' | 'out' | 'adjust', note = ''): Promise<Item> {

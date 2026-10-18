@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { objectLabelFromPlaces } from '../data/icons'
 import { readFileAsText } from '../data/backup'
+import { dueServiceItems } from '../data/service'
 
 export function MoreScreen({ state }: { state: KeepItState }) {
   const active = state.settings?.activeObject ?? 'dacha'
@@ -9,6 +10,7 @@ export function MoreScreen({ state }: { state: KeepItState }) {
   const lentCount = state.lentItems().length
   const uncategorizedCount = state.uncategorizedItems().length
   const duplicateCount = state.duplicateGroups().length
+  const serviceDueCount = dueServiceItems(state.serviceItems()).length
   const activeLabel = objectLabelFromPlaces(active, state.places)
   const fileRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
@@ -92,6 +94,17 @@ export function MoreScreen({ state }: { state: KeepItState }) {
             <span className="muted">Кому отдали и с какой даты</span>
           </span>
           {lentCount > 0 ? <span className="badge warn">{lentCount}</span> : null}
+        </button>
+        <button
+          type="button"
+          className="list-item"
+          onClick={() => state.navigate({ name: 'reminders' })}
+        >
+          <span>
+            <strong>Напоминания</strong>
+            <span className="muted">Техническое обслуживание оборудования</span>
+          </span>
+          {serviceDueCount > 0 ? <span className="badge warn">{serviceDueCount}</span> : null}
         </button>
         <button
           type="button"

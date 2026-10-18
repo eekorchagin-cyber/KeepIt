@@ -117,6 +117,42 @@ export async function notifyAboutUpdate(remote: RemoteVersion): Promise<void> {
   reg?.active?.postMessage({ type: 'show-update', remote })
 }
 
+const SERVICE_NOTIFIED_KEY = 'keepit-service-notified'
+
+/**
+ * Уведомление о необходимости ТО — не чаще раза в день.
+ * `due` — вещи с просроченным или близким ТО, `today` — YYYY-MM-DD.
+ */
+export async function notifyServiceDue(
+  due: Array<{ name: string; label: string }>,
+  today: string,
+): Promise<void> {
+  if (due.length === 0 || notifyStatus() !== 'on') return
+  try {
+    if (localStorage.getItem(SERVICE_NOTIFIED_KEY) === today) return
+  } catch {
+    return
+  }
+  const reg = await registration()
+  if (!reg) return
+  const lines = due.slice(0, 4).map((entry) => `${entry.name} — ${entry.label}`)
+  if (due.length > 4) lines.push(`и ещё ${due.length - 4}`)
+  try {
+    await reg.showNotification(
+      due.length === 1 ? 'KeepIt: пора провести ТО' : `KeepIt: пора провести ТО (${due.length})`,
+      {
+        body: lines.join('\n'),
+        icon: './icons/app-192.png',
+        badge: './icons/app-192.png',
+        tag: 'keepit-service',
+      },
+    )
+    localStorage.setItem(SERVICE_NOTIFIED_KEY, today)
+  } catch {
+    // уведомления недоступны
+  }
+}
+
 export async function clearUpdateBadge(): Promise<void> {
   const nav = navigator as BadgeNavigator
   try {

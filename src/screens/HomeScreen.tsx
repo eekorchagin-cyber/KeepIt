@@ -1,11 +1,13 @@
 import { ObjectBadge } from '../components/ObjectBadge'
 import { versionLabel } from '../data/appVersion'
+import { dueServiceItems } from '../data/service'
 import { rootObjects } from '../data/icons'
 import type { KeepItState } from '../hooks/useKeepIt'
 import type { ObjectKey } from '../types'
 
 export function HomeScreen({ state }: { state: KeepItState }) {
   const roots = rootObjects(state.places)
+  const due = dueServiceItems(state.serviceItems())
 
   async function openObject(objectKey: ObjectKey) {
     await state.setActiveObject(objectKey)
@@ -14,6 +16,19 @@ export function HomeScreen({ state }: { state: KeepItState }) {
 
   return (
     <div className="stack screen-fill home-screen">
+      {due.length > 0 ? (
+        <button type="button" className="place-banner" onClick={() => state.navigate({ name: 'reminders' })}>
+          <strong>Пора провести ТО: {due.length}</strong>
+          <span className="muted">
+            {' '}
+            — {due
+              .slice(0, 3)
+              .map((item) => item.name)
+              .join(', ')}
+            {due.length > 3 ? '…' : ''}
+          </span>
+        </button>
+      ) : null}
       <div className="section-grid">
         {roots.map((root) => {
           const active = state.settings?.activeObject === root.objectKey

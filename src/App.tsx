@@ -3,6 +3,7 @@ import { TopBar } from './components/TopBar'
 import { UpdateBanner } from './components/UpdateBanner'
 import { useAppUpdate } from './hooks/useAppUpdate'
 import { useKeepIt } from './hooks/useKeepIt'
+import { useServiceReminders } from './hooks/useServiceReminders'
 import { AddItemScreen } from './screens/AddItemScreen'
 import { CategoriesScreen } from './screens/CategoriesScreen'
 import { CategorizeScreen } from './screens/CategorizeScreen'
@@ -17,6 +18,7 @@ import { MoreScreen } from './screens/MoreScreen'
 import { ObjectScreen } from './screens/ObjectScreen'
 import { PlaceScreen } from './screens/PlaceScreen'
 import { PrintLabelsScreen } from './screens/PrintLabelsScreen'
+import { RemindersScreen } from './screens/RemindersScreen'
 import { ScanScreen } from './screens/ScanScreen'
 import { SearchScreen } from './screens/SearchScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
@@ -24,6 +26,7 @@ import { SettingsScreen } from './screens/SettingsScreen'
 export default function App() {
   const state = useKeepIt()
   const update = useAppUpdate()
+  useServiceReminders(state)
 
   if (state.loading || !state.settings) {
     return (
@@ -50,6 +53,7 @@ export default function App() {
         {state.screen.name === 'import-list' ? (
           <ImportListScreen state={state} placeId={state.screen.placeId} />
         ) : null}
+        {state.screen.name === 'reminders' ? <RemindersScreen state={state} /> : null}
         {state.screen.name === 'duplicates' ? (
           <DuplicatesScreen state={state} placeId={state.screen.placeId} />
         ) : null}
