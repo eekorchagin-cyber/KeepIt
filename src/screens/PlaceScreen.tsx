@@ -151,6 +151,9 @@ export function PlaceScreen({ state, placeId }: { state: KeepItState; placeId: s
   const children = state.childPlaces(placeId)
   const items = state.itemsInPlace(placeId)
   const uncategorized = state.uncategorizedItems(placeId).length
+  const upstreamItems = path
+    .slice(0, -1)
+    .reduce((sum, entry) => sum + state.itemsInPlace(entry.id).length, 0)
 
   if (!place) {
     return (
@@ -193,6 +196,15 @@ export function PlaceScreen({ state, placeId }: { state: KeepItState; placeId: s
         >
           Импорт списка вещей
         </button>
+        {upstreamItems > 0 ? (
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => state.navigate({ name: 'gather-items', placeId })}
+          >
+            Перенести сюда вещи ({upstreamItems} выше по пути)
+          </button>
+        ) : null}
         {uncategorized > 0 ? (
           <button
             type="button"

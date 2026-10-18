@@ -36,6 +36,7 @@ export type Screen =
   | { name: 'place'; placeId: string }
   | { name: 'add-item'; placeId: string }
   | { name: 'import-list'; placeId: string }
+  | { name: 'gather-items'; placeId: string }
   | { name: 'categorize'; placeId?: string }
   | { name: 'item'; itemId: string }
   | { name: 'edit-item'; itemId: string }

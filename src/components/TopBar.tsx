@@ -28,6 +28,7 @@ function titleFor(state: KeepItState): string {
   }
   if (screen.name === 'add-item') return 'Новая вещь'
   if (screen.name === 'import-list') return 'Импорт списка'
+  if (screen.name === 'gather-items') return 'Перенос вещей'
   if (screen.name === 'categorize') return 'Категории вещей'
   if (screen.name === 'scan') return 'Сканер'
   if (screen.name === 'search') return 'Поиск'

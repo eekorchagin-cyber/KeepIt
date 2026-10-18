@@ -959,6 +959,18 @@ export async function moveItem(itemId: string, placeId: string): Promise<Item> {
   return next
 }
 
+/** Перенести несколько вещей в одно место (расходники с тем же названием складываются). */
+export async function moveItems(itemIds: string[], placeId: string): Promise<number> {
+  const place = await getPlace(placeId)
+  if (!place) throw new Error('Место не найдено')
+  let moved = 0
+  for (const id of itemIds) {
+    await moveItem(id, place.id)
+    moved += 1
+  }
+  return moved
+}
+
 export function normalizeSearch(value: string): string {
   return value
     .toLowerCase()

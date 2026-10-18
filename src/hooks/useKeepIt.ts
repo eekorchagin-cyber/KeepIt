@@ -29,6 +29,7 @@ import {
   isItemLent,
   lendItem,
   moveItem,
+  moveItems,
   movePlace,
   placePath,
   renameCategory,
@@ -75,6 +76,7 @@ function fallbackParent(screen: Screen, places: Place[]): Screen {
     }
     case 'add-item':
     case 'import-list':
+    case 'gather-items':
       return { name: 'place', placeId: screen.placeId }
     case 'categorize':
       return screen.placeId ? { name: 'place', placeId: screen.placeId } : { name: 'more' }
@@ -153,6 +155,8 @@ export type KeepItState = {
     needsFill?: boolean
   }) => Promise<Item>
   relocateItem: (itemId: string, placeId: string) => Promise<Item>
+  /** Перенести несколько вещей в одно место */
+  relocateItems: (itemIds: string[], placeId: string) => Promise<number>
   lendOutItem: (itemId: string, lentTo: string, lentAt: string) => Promise<Item>
   returnFromLend: (itemId: string) => Promise<Item>
   makeFreeLabels: (parentId: string, count: number) => Promise<Place[]>
@@ -400,6 +404,11 @@ export function useKeepIt(): KeepItState {
       const next = await updateItem(itemId, patch)
       await refresh()
       return next
+    },
+    relocateItems: async (itemIds, placeId) => {
+      const moved = await moveItems(itemIds, placeId)
+      await refresh()
+      return moved
     },
     relocateItem: async (itemId, placeId) => {
       const moved = await moveItem(itemId, placeId)

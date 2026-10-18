@@ -8,6 +8,7 @@ import { CategoriesScreen } from './screens/CategoriesScreen'
 import { CategorizeScreen } from './screens/CategorizeScreen'
 import { ImportListScreen } from './screens/ImportListScreen'
 import { EditItemScreen } from './screens/EditItemScreen'
+import { GatherItemsScreen } from './screens/GatherItemsScreen'
 import { HomeScreen } from './screens/HomeScreen'
 import { ItemScreen } from './screens/ItemScreen'
 import { LentItemsScreen } from './screens/LentItemsScreen'
@@ -47,6 +48,9 @@ export default function App() {
         {state.screen.name === 'add-item' ? <AddItemScreen state={state} placeId={state.screen.placeId} /> : null}
         {state.screen.name === 'import-list' ? (
           <ImportListScreen state={state} placeId={state.screen.placeId} />
+        ) : null}
+        {state.screen.name === 'gather-items' ? (
+          <GatherItemsScreen state={state} placeId={state.screen.placeId} />
         ) : null}
         {state.screen.name === 'categorize' ? (
           <CategorizeScreen state={state} placeId={state.screen.placeId} />
