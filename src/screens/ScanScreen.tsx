@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { parsePlaceFromScan } from '../data/placeCodes'
+import { getQrDetector } from '../data/qrDetector'
 import { listPlaces } from '../data/repository'
 
 function stopStream(stream: MediaStream | null | undefined) {
@@ -72,12 +73,7 @@ export function ScanScreen({ state }: { state: KeepItState }) {
         video.srcObject = stream
         await video.play()
 
-        if (typeof BarcodeDetector === 'undefined') {
-          setCameraError('Автосканер QR в этом браузере недоступен — введите код вручную.')
-          return
-        }
-
-        const detector = new BarcodeDetector({ formats: ['qr_code'] })
+        const detector = getQrDetector()
         const tick = async () => {
           if (cancelled || !videoRef.current || !streamRef.current) return
           try {

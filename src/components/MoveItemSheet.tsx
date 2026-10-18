@@ -3,6 +3,7 @@ import type { KeepItState } from '../hooks/useKeepIt'
 import { ObjectBadge } from './ObjectBadge'
 import { rootObjects } from '../data/icons'
 import { parsePlaceFromScan } from '../data/placeCodes'
+import { getQrDetector } from '../data/qrDetector'
 import { listPlaces, movesWithContents } from '../data/repository'
 import type { Place } from '../types'
 
@@ -367,12 +368,7 @@ function MoveQrScan({
         video.srcObject = stream
         await video.play()
 
-        if (typeof BarcodeDetector === 'undefined') {
-          setCameraError('Автосканер QR недоступен — введите код места вручную.')
-          return
-        }
-
-        const detector = new BarcodeDetector({ formats: ['qr_code'] })
+        const detector = getQrDetector()
         const tick = async () => {
           if (cancelled || handledRef.current || !videoRef.current || !streamRef.current) return
           try {
