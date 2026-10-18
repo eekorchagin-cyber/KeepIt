@@ -1,12 +1,13 @@
 import type { ObjectKey, Place } from '../types'
 
-export type ObjectIconId = 'apartment' | 'home' | 'dacha' | 'work' | 'room' | 'shelf' | 'box'
+export type ObjectIconId = 'apartment' | 'home' | 'dacha' | 'work' | 'suitcase' | 'room' | 'shelf' | 'box'
 
 export const OBJECT_ICON_OPTIONS: Array<{ id: ObjectIconId; src: string; label: string }> = [
   { id: 'apartment', src: './icons/apartment.png', label: 'Квартира' },
   { id: 'home', src: './icons/home.png', label: 'Дом' },
   { id: 'dacha', src: './icons/dacha.png', label: 'Дача' },
   { id: 'work', src: './icons/work.png', label: 'Работа' },
+  { id: 'suitcase', src: './icons/suitcase.png', label: 'На выезд' },
   { id: 'room', src: './icons/room.png', label: 'Комната' },
   { id: 'shelf', src: './icons/shelf.png', label: 'Стеллаж' },
   { id: 'box', src: './icons/box.png', label: 'Коробка' },
