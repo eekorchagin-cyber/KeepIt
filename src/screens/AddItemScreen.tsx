@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { CategoryPicker } from '../components/CategoryPicker'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { findName } from '../data/itemNames'
+import { normalizeSearch } from '../data/repository'
 import { unitForMode, unitOptionsFor } from '../data/units'
 import type { AccountingMode, UnitCode } from '../types'
 
@@ -24,6 +25,23 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
       </div>
     )
   }
+
+  // Подсказки из каталога — только когда начали вводить; сначала названия, которые начинаются с введённого
+  const query = normalizeSearch(name)
+  const suggestions =
+    query && !findName(state.itemNames, name)
+      ? state.itemNames
+          .filter((entry) => {
+            const key = normalizeSearch(entry.name)
+            return key.includes(query) && key !== query
+          })
+          .sort(
+            (a, b) =>
+              Number(!normalizeSearch(a.name).startsWith(query)) - Number(!normalizeSearch(b.name).startsWith(query)) ||
+              a.name.localeCompare(b.name, 'ru'),
+          )
+          .slice(0, 6)
+      : []
 
   function onNameChange(value: string) {
     setName(value)
@@ -63,7 +81,8 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
         setNote('')
         setQuantity(mode === 'durable' ? '1' : '0')
       } else {
-        state.navigate({ name: 'place', placeId })
+        // Назад к месту, откуда открыли «+», — экран ввода не остаётся в истории «←»
+        state.goBack()
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка')
@@ -75,24 +94,33 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
   return (
     <div className="stack">
       <div className="panel stack">
-        <strong>Новая вещь</strong>
         <p className="muted">Место: {place.name}</p>
 
         <label className="field">
           Название
-          <input
-            value={name}
-            onChange={(e) => onNameChange(e.target.value)}
-            autoFocus
-            placeholder="Дрель"
-            list="item-names"
-          />
-          <datalist id="item-names">
-            {state.itemNames.map((entry) => (
-              <option key={entry.id} value={entry.name} />
-            ))}
-          </datalist>
+          <input value={name} onChange={(e) => onNameChange(e.target.value)} placeholder="Дрель" autoComplete="off" />
         </label>
+        {suggestions.length > 0 ? (
+          <div className="name-suggest" role="listbox" aria-label="Названия из каталога">
+            {suggestions.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                className="name-suggest-row"
+                role="option"
+                aria-selected={false}
+                onClick={() => onNameChange(entry.name)}
+              >
+                <span>{entry.name}</span>
+                {entry.category ? (
+                  <span className="muted">
+                    {entry.subcategory ? `${entry.category} / ${entry.subcategory}` : entry.category}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         <label className="field">
           Режим учёта
