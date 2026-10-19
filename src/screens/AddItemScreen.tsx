@@ -6,6 +6,17 @@ import { normalizeSearch } from '../data/repository'
 import { unitForMode, unitOptionsFor } from '../data/units'
 import type { AccountingMode, UnitCode } from '../types'
 
+/** После выбора подсказки список исчезает — «click» того же касания не должен попасть в поле под пальцем */
+function swallowNextClick() {
+  const stop = (event: MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    document.removeEventListener('click', stop, true)
+  }
+  document.addEventListener('click', stop, true)
+  window.setTimeout(() => document.removeEventListener('click', stop, true), 600)
+}
+
 export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId: string }) {
   const place = state.findPlace(placeId)
   const [name, setName] = useState('')
@@ -44,6 +55,24 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
           )
           .slice(0, 6)
       : []
+
+  /** Где ещё лежат вещи с таким названием — только для сведения, место новой вещи не меняется */
+  function whereStored(entryName: string): string {
+    const key = normalizeSearch(entryName)
+    const places = [
+      ...new Set(state.items.filter((item) => normalizeSearch(item.name) === key).map((item) => item.placeId)),
+    ]
+      .map((id) => state.findPlace(id)?.name)
+      .filter((placeName): placeName is string => Boolean(placeName))
+    if (places.length === 0) return ''
+    return places.length > 2 ? `${places.slice(0, 2).join(', ')} и ещё ${places.length - 2}` : places.join(', ')
+  }
+
+  function pickSuggestion(value: string) {
+    if (!typingName) return
+    onNameChange(value)
+    setTypingName(false)
+  }
 
   function onNameChange(value: string) {
     setName(value)
@@ -121,19 +150,21 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
                 className="name-suggest-row"
                 role="option"
                 aria-selected={false}
-                // Не уводим фокус из поля до нажатия, иначе подсказка исчезнет раньше выбора
-                onPointerDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  onNameChange(entry.name)
-                  setTypingName(false)
+                // Выбор — в момент касания: на iPhone поле теряет фокус раньше «click», и список исчезает до выбора
+                onPointerDown={(e) => {
+                  e.preventDefault()
+                  swallowNextClick()
+                  pickSuggestion(entry.name)
                 }}
+                onClick={() => pickSuggestion(entry.name)}
               >
-                <span>{entry.name}</span>
+                <span className="name-suggest-name">{entry.name}</span>
                 {entry.category ? (
                   <span className="muted">
-                    {entry.subcategory ? `${entry.category} / ${entry.subcategory}` : entry.category}
+                    Категория: {entry.subcategory ? `${entry.category} / ${entry.subcategory}` : entry.category}
                   </span>
                 ) : null}
+                {whereStored(entry.name) ? <span className="muted">Уже есть: {whereStored(entry.name)}</span> : null}
               </button>
             ))}
           </div>

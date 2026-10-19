@@ -5,13 +5,8 @@ import { ModeCategory } from '../components/ModeCategory'
 import { PlaceTools } from '../components/PlaceTools'
 import { isItemLent, isUnusedFreeLabel } from '../data/repository'
 import { formatQty } from '../data/units'
-import type { Place, UnitCode } from '../types'
-
-function formatStock(stock: { total: number; unit: UnitCode | null; itemCount: number }): string {
-  if (stock.itemCount === 0) return '0'
-  if (stock.unit) return formatQty(stock.total, stock.unit)
-  return String(stock.total)
-}
+import { BadgeCountToggle } from '../components/BadgeCountToggle'
+import type { Place } from '../types'
 
 function NestedPlaces({ state, places }: { state: KeepItState; places: Place[] }) {
   const [selecting, setSelecting] = useState(false)
@@ -83,6 +78,7 @@ function NestedPlaces({ state, places }: { state: KeepItState; places: Place[] }
           {selecting ? 'Готово' : 'Выбрать'}
         </button>
       </div>
+      {!selecting ? <BadgeCountToggle state={state} /> : null}
 
       {!selecting && unusedFree.length > 0 ? (
         <button type="button" className="place-banner" onClick={() => startSelecting(unusedFree)}>
@@ -112,7 +108,7 @@ function NestedPlaces({ state, places }: { state: KeepItState; places: Place[] }
                 <strong>{child.name}</strong>
                 <span className="place-code muted">{child.code}</span>
               </span>
-              <span className="badge">{formatStock(state.stockInSubtree(child.id))}</span>
+              <span className="badge">{state.placeBadge(child.id)}</span>
             </button>
           ),
         )}
@@ -309,7 +305,7 @@ function PlaceSearch({ state, place, children }: { state: KeepItState; place: Pl
                     <strong>{entry.name}</strong>
                     <span className="muted">Место · {entry.parentId ? relativePath(entry.parentId) : ''}</span>
                   </span>
-                  <span className="badge">{formatStock(state.stockInSubtree(entry.id))}</span>
+                  <span className="badge">{state.placeBadge(entry.id)}</span>
                 </button>
               ))}
               {results.items.map((item) => (

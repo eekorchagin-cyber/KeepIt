@@ -42,8 +42,16 @@ function writeStored(key: string, value: string) {
   }
 }
 
-/** Список меток: название, полный путь и QR-код. */
-function LabelList({ title, labels }: { title: string; labels: LabelView[] }) {
+/** Список меток: название, путь (полный или внутри помещения) и QR-код. */
+function LabelList({
+  title,
+  labels,
+  pathOf,
+}: {
+  title: string
+  labels: LabelView[]
+  pathOf: (id: string) => string
+}) {
   return (
     <div className="stack">
       <strong>{title}</strong>
@@ -53,7 +61,7 @@ function LabelList({ title, labels }: { title: string; labels: LabelView[] }) {
           <div key={label.id} className="list-item">
             <span className="stack-tight">
               <strong>{label.name}</strong>
-              <span className="place-code muted">{label.code}</span>
+              {pathOf(label.id) ? <span className="place-code muted">{pathOf(label.id)}</span> : null}
             </span>
             <img src={label.qrDataUrl} alt="" width={56} height={56} />
           </div>
@@ -67,11 +75,14 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
   const startId = placeId ?? state.places.find((place) => place.type === 'object')?.id ?? ''
   const start = state.findPlace(startId)
 
-  /** Ближайшее помещение вверх по пути (или сам объект, если помещения нет). */
+  /**
+   * Помещение места: ближайшее вверх по пути с типом «помещение», иначе место первого уровня внутри объекта
+   * (например «Каменный гараж»), для самого объекта — объект.
+   */
   function roomOf(id: string): string {
     const path = state.pathFor(id)
     const room = [...path].reverse().find((part) => part.type === 'room')
-    return room?.id ?? path[0]?.id ?? id
+    return room?.id ?? path[1]?.id ?? path[0]?.id ?? id
   }
 
   const [mode, setMode] = useState<PrintMode>(() =>
@@ -99,13 +110,19 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
 
   const objectKey = start?.objectKey
   const objectPlaces = state.places.filter((place) => place.objectKey === objectKey)
+  const objectRoot = objectPlaces.find((place) => place.type === 'object')
   const roomOptions = [
+    ...(objectRoot ? [{ id: objectRoot.id, label: `Весь объект «${objectRoot.name}»` }] : []),
     ...objectPlaces
-      .filter((place) => place.type === 'object')
-      .map((place) => ({ id: place.id, label: `Весь объект «${place.name}»` })),
-    ...objectPlaces
-      .filter((place) => place.type === 'room')
-      .map((place) => ({ id: place.id, label: place.name }))
+      .filter((place) => place.type === 'room' || (objectRoot && place.parentId === objectRoot.id))
+      .map((place) => ({
+        id: place.id,
+        label: state
+          .pathFor(place.id)
+          .slice(1)
+          .map((part) => part.name)
+          .join(' / '),
+      }))
       .sort((a, b) => a.label.localeCompare(b.label, 'ru')),
   ]
   const sourcePlaces = useMemo(() => {
@@ -128,6 +145,25 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     const seen = new Set(sourcePlaces.map((place) => place.id))
     return [...sourcePlaces, ...extraPlaces.filter((place) => !seen.has(place.id))]
   }, [sourcePlaces, extraPlaces])
+
+  /** Путь к месту без его названия: «Дача / Каменный гараж» — печатается на метке под названием */
+  function parentPath(id: string): string {
+    return state
+      .pathFor(id)
+      .slice(0, -1)
+      .map((part) => part.name)
+      .join(' / ')
+  }
+
+  /** Путь внутри выбранного помещения — в списке «Метки к печати» */
+  function pathInRoom(id: string): string {
+    const path = state.pathFor(id)
+    const index = path.findIndex((part) => part.id === roomId)
+    return path
+      .slice(index >= 0 ? index + 1 : 1, -1)
+      .map((part) => part.name)
+      .join(' / ')
+  }
 
   function labelSetKey(list: Place[]): string {
     return `${printer.id}:${list
@@ -174,7 +210,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     try {
       if (isAirPrint && target === 'pdf') {
         const blob = await renderLabelsPdf(
-          list.map((place) => ({ name: place.name, url: placeUrl(place.id) })),
+          list.map((place) => ({ name: place.name, url: placeUrl(place.id), path: parentPath(place.id) })),
           printer.method === 'airprint-tape' ? 'airprint-tape' : 'airprint-a4',
         )
         const title = list.length === 1 ? safeFileName(list[0]!.name) : `${list.length} шт.`
@@ -206,7 +242,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
       }
       const prepared = await Promise.all(
         list.map(async (place) => {
-          const blob = await renderLabelPng(place.name, placeUrl(place.id), size, printer.dotsPerMm)
+          const blob = await renderLabelPng(place.name, placeUrl(place.id), size, printer.dotsPerMm, parentPath(place.id))
           return { id: place.id, name: place.name, blob, previewUrl: URL.createObjectURL(blob) }
         }),
       )
@@ -337,10 +373,10 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
         {mode === 'room' ? (
           <p className="muted">
             Метки на помещение и все места в нём на любой глубине (стеллажи, полки, коробки):{' '}
-            {sourcePlaces.length}. На этикетке — QR-код и название места.
+            {sourcePlaces.length}. На этикетке — QR-код, название места и путь к нему.
           </p>
         ) : (
-          <LabelList title="Метки к печати" labels={labels} />
+          <LabelList title="Метки к печати" labels={labels} pathOf={parentPath} />
         )}
       </div>
 
@@ -424,7 +460,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
         </div>
       ) : mode === 'room' ? (
         <div className="panel stack">
-          <LabelList title="Метки к печати" labels={labels} />
+          <LabelList title="Метки к печати" labels={labels} pathOf={pathInRoom} />
         </div>
       ) : null}
 
@@ -475,12 +511,16 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
                 printer.method === 'airprint-tape' ? (
                   <div key={label.id} className="tape-label">
                     <img src={label.qrDataUrl} alt="" />
-                    <div className="tape-name">{label.name}</div>
+                    <div className="tape-text">
+                      <div className="tape-name">{label.name}</div>
+                      {parentPath(label.id) ? <div className="tape-path">{parentPath(label.id)}</div> : null}
+                    </div>
                   </div>
                 ) : (
                   <div key={label.id} className="label-card">
                     <img src={label.qrDataUrl} alt="" />
                     <div className="label-name">{label.name}</div>
+                    {parentPath(label.id) ? <div className="label-path">{parentPath(label.id)}</div> : null}
                   </div>
                 ),
               )}

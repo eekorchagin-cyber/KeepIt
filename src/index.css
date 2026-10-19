@@ -903,6 +903,22 @@ html[data-theme='dark'] .badge.warn {
 }
 
 /* Путь места — своей строкой во всю ширину, значки действий — строкой ниже */
+.duplicates-result {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elevated));
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.badge-toggle {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 /* Подсказки названий из каталога под полем ввода */
 .name-suggest {
   display: grid;
@@ -933,6 +949,10 @@ html[data-theme='dark'] .badge.warn {
 
 .name-suggest-row + .name-suggest-row {
   border-top: 1px solid var(--line);
+}
+
+.name-suggest-name {
+  color: color-mix(in srgb, var(--ink) 75%, var(--bg-elevated));
 }
 
 .name-suggest-row .muted {
@@ -1210,6 +1230,15 @@ html[data-theme='dark'] .badge.warn {
     font-weight: 700;
     line-height: 1.15;
     hyphens: auto;
+    overflow-wrap: break-word;
+  }
+
+  .print-tape62 .tape-path,
+  .print-a4 .label-path {
+    margin-top: 1mm;
+    font-size: 7.5pt;
+    font-weight: 500;
+    line-height: 1.2;
     overflow-wrap: break-word;
   }
 }

@@ -51,8 +51,15 @@ import {
 } from '../data/repository'
 import { cloneCategoryTree, sortCategoryTree } from '../data/categories'
 import type { ObjectIconId } from '../data/icons'
-import { findDuplicateGroups, type DuplicateGroup } from '../data/duplicates'
+import {
+  duplicateSignature,
+  findDuplicateGroups,
+  readKeptDuplicates,
+  writeKeptDuplicates,
+  type DuplicateGroup,
+} from '../data/duplicates'
 import { listItemNames } from '../data/itemNames'
+import { formatQty } from '../data/units'
 import type {
   AccountingMode,
   AppSettings,
@@ -64,6 +71,7 @@ import type {
   PlaceType,
   Screen,
   ThemeMode,
+  BadgeCount,
   UnitCode,
 } from '../types'
 
@@ -121,6 +129,8 @@ export type KeepItState = {
   screen: Screen
   /** Текущий экран открыт стрелкой «←» (прокрутку экрана можно восстановить) */
   cameBack: boolean
+  /** Последнее открытое место хранения (текущее или ближайшее в истории «←») — для печати меток из «Ещё» */
+  recentPlaceId: string | null
   error: string | null
   canGoBack: boolean
   refresh: () => Promise<void>
@@ -130,8 +140,15 @@ export type KeepItState = {
   setScreen: (screen: Screen) => void
   /** Сменить экран, не добавляя шаг в историю «←» */
   replaceScreen: (screen: Screen) => void
+  /** Вернуться к экрану (как «←», если он есть в истории), иначе открыть его без карточек вещи в истории */
+  returnTo: (screen: Screen) => void
   setActiveObject: (objectKey: ObjectKey) => Promise<void>
   setTheme: (theme: ThemeMode) => Promise<void>
+  /** Что считать на бейджах мест: количество или позиции */
+  badgeCount: BadgeCount
+  setBadgeCount: (mode: BadgeCount) => Promise<void>
+  /** Подпись бейджа места по выбранному счётчику: «12 шт.» или «3 поз.» */
+  placeBadge: (placeId: string) => string
   addCategory: (name: string) => Promise<void>
   renameCategory: (oldName: string, newName: string) => Promise<void>
   deleteCategory: (name: string) => Promise<void>
@@ -232,6 +249,8 @@ export type KeepItState = {
   searchInPlace: (placeId: string, query: string) => { places: Place[]; items: Item[] }
   /** Группы дублей (одинаковое название в одном месте или в месте и вложенном): в месте и вложенных или во всём активном объекте */
   duplicateGroups: (placeId?: string) => DuplicateGroup[]
+  /** Оставить копии как разные вещи — группа больше не показывается в дублях */
+  keepDuplicates: (itemIds: string[]) => void
   /** Сколько вложенных мест и вещей во всём поддереве места */
   contentsOf: (placeId: string) => { places: number; items: number }
   /** Записать итог инвентаризации */
@@ -254,6 +273,7 @@ export function useKeepIt(): KeepItState {
   const [screen, setScreenState] = useState<Screen>({ name: 'home' })
   const [history, setHistory] = useState<Screen[]>([])
   const [cameBack, setCameBack] = useState(false)
+  const [keptDuplicates, setKeptDuplicates] = useState<Set<string>>(readKeptDuplicates)
   const [error, setError] = useState<string | null>(null)
   const screenRef = useRef(screen)
   const historyRef = useRef(history)
@@ -342,6 +362,21 @@ export function useKeepIt(): KeepItState {
     setScreenState(next)
   }, [])
 
+  const returnTo = useCallback((target: Screen) => {
+    const prev = historyRef.current
+    const index = prev.findLastIndex((entry) => sameScreen(entry, target))
+    if (index >= 0) {
+      setHistory(prev.slice(0, index))
+      setCameBack(true)
+    } else {
+      let end = prev.length
+      while (end > 0 && (prev[end - 1]!.name === 'item' || prev[end - 1]!.name === 'edit-item')) end -= 1
+      setHistory(prev.slice(0, end))
+      setCameBack(false)
+    }
+    setScreenState(target)
+  }, [])
+
   const goBack = useCallback(() => {
     const prev = historyRef.current
     setCameBack(true)
@@ -362,7 +397,24 @@ export function useKeepIt(): KeepItState {
     setScreenState(fallbackParent(current, places))
   }, [items, places])
 
+  const badgeCount: BadgeCount = settings?.badgeCount ?? 'quantity'
+
+  const stockInSubtree = (placeId: string) => {
+    const placeIds = subtreeIds(placeId, places)
+    // Заготовки «требует заполнения» не участвуют в остатках
+    const nested = visibleItems.filter((item) => placeIds.has(item.placeId) && !item.needsFill)
+    const total = nested.reduce((sum, item) => sum + item.quantity, 0)
+    const units = new Set(nested.map((item) => item.unit))
+    return {
+      total,
+      unit: units.size === 1 ? (nested[0]?.unit ?? null) : null,
+      itemCount: nested.length,
+    }
+  }
+
   const canGoBack = history.length > 0 || screen.name !== 'home'
+  const recentPlaceId =
+    [screen, ...[...history].reverse()].flatMap((entry) => (entry.name === 'place' ? [entry.placeId] : []))[0] ?? null
 
   return {
     loading,
@@ -373,6 +425,7 @@ export function useKeepIt(): KeepItState {
     itemNames,
     screen,
     cameBack,
+    recentPlaceId,
     error,
     canGoBack,
     refresh,
@@ -381,6 +434,7 @@ export function useKeepIt(): KeepItState {
     goBack,
     setScreen: navigate,
     replaceScreen,
+    returnTo,
     setActiveObject: async (objectKey) => {
       await updateSettings({ activeObject: objectKey })
       await refresh()
@@ -389,6 +443,16 @@ export function useKeepIt(): KeepItState {
       const next = await updateSettings({ theme })
       applyTheme(next.theme, next.fontScale)
       setSettings(next)
+    },
+    badgeCount,
+    setBadgeCount: async (mode) => {
+      setSettings(await updateSettings({ badgeCount: mode }))
+    },
+    placeBadge: (placeId) => {
+      const stock = stockInSubtree(placeId)
+      if (badgeCount === 'positions') return `${stock.itemCount} поз.`
+      if (stock.itemCount === 0) return '0'
+      return stock.unit ? formatQty(stock.total, stock.unit) : String(stock.total)
     },
     addCategory: async (name) => {
       await addCategory(name)
@@ -505,18 +569,7 @@ export function useKeepIt(): KeepItState {
     childPlaces: (placeId) =>
       places.filter((place) => place.parentId === placeId).sort((a, b) => a.name.localeCompare(b.name, 'ru')),
     itemsInPlace: (placeId) => visibleItems.filter((item) => item.placeId === placeId),
-    stockInSubtree: (placeId) => {
-      const placeIds = subtreeIds(placeId, places)
-      // Заготовки «требует заполнения» не участвуют в остатках
-      const nested = visibleItems.filter((item) => placeIds.has(item.placeId) && !item.needsFill)
-      const total = nested.reduce((sum, item) => sum + item.quantity, 0)
-      const units = new Set(nested.map((item) => item.unit))
-      return {
-        total,
-        unit: units.size === 1 ? (nested[0]?.unit ?? null) : null,
-        itemCount: nested.length,
-      }
-    },
+    stockInSubtree,
     searchItems: (query) => {
       const q = query.trim().toLowerCase().replaceAll('ё', 'е')
       if (!q) return visibleItems
@@ -595,12 +648,19 @@ export function useKeepIt(): KeepItState {
       }
     },
     duplicateGroups: (placeId) => {
-      if (!placeId) return findDuplicateGroups(visibleItems, places)
-      const placeIds = subtreeIds(placeId, places)
-      return findDuplicateGroups(
-        items.filter((item) => placeIds.has(item.placeId)),
-        places,
+      const placeIds = placeId ? subtreeIds(placeId, places) : null
+      const source = placeIds ? items.filter((item) => placeIds.has(item.placeId)) : visibleItems
+      return findDuplicateGroups(source, places).filter(
+        (group) => !keptDuplicates.has(duplicateSignature(group.items.map((item) => item.id))),
       )
+    },
+    keepDuplicates: (itemIds) => {
+      setKeptDuplicates((current) => {
+        const next = new Set(current)
+        next.add(duplicateSignature(itemIds))
+        writeKeptDuplicates(next)
+        return next
+      })
     },
     contentsOf: (placeId) => {
       const placeIds = subtreeIds(placeId, places)

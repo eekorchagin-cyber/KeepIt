@@ -35,11 +35,15 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
   return lines
 }
 
+function pathFontAt(size: number): string {
+  return fontAt(size).replace(/^700/, '500')
+}
+
 /**
- * Картинка этикетки точно под размер ленты: слева QR-код, справа название места.
+ * Картинка этикетки точно под размер ленты: слева QR-код, справа название места и ниже мельче — путь к нему.
  * QR рисуется по модулям без сглаживания — чёткая печать на термопринтере.
  */
-function drawLabel(name: string, url: string, size: LabelSize, dotsPerMm: number): HTMLCanvasElement {
+function drawLabel(name: string, url: string, size: LabelSize, dotsPerMm: number, path = ''): HTMLCanvasElement {
   const width = Math.round(size.widthMm * dotsPerMm)
   const height = Math.round(size.heightMm * dotsPerMm)
   const margin = Math.round(1.5 * dotsPerMm)
@@ -76,23 +80,39 @@ function drawLabel(name: string, url: string, size: LabelSize, dotsPerMm: number
   const textHeight = height - margin * 2
   let fontSize = Math.min(5 * dotsPerMm, textHeight / 2)
   const minFont = 2 * dotsPerMm
+  const pathFontFor = (nameFont: number) => Math.max(2 * dotsPerMm, Math.min(3 * dotsPerMm, nameFont * 0.62))
+  const pathGap = path ? Math.round(1 * dotsPerMm) : 0
   let lines: string[] = []
+  let pathLines: string[] = []
   const words = name.split(/\s+/).filter(Boolean)
   while (fontSize >= minFont) {
     ctx.font = fontAt(fontSize)
     lines = wrapText(ctx, name, textWidth)
     // Слова не рвём, пока можно уменьшить шрифт
     const wordsFit = words.every((word) => ctx.measureText(word).width <= textWidth)
-    const fits = lines.length * fontSize * 1.15 <= textHeight && lines.length <= 4
+    const pathFont = pathFontFor(fontSize)
+    ctx.font = pathFontAt(pathFont)
+    pathLines = path ? wrapText(ctx, path, textWidth).slice(0, 3) : []
+    const blockHeight = lines.length * fontSize * 1.15 + pathGap + pathLines.length * pathFont * 1.2
+    const fits = blockHeight <= textHeight && lines.length <= 4
     if (fits && (wordsFit || fontSize - 0.5 * dotsPerMm < minFont)) break
     fontSize -= 0.5 * dotsPerMm
   }
-  ctx.font = fontAt(fontSize)
   ctx.textBaseline = 'top'
   const lineHeight = fontSize * 1.15
+  const pathFont = pathFontFor(fontSize)
+  const pathLineHeight = pathFont * 1.2
   const shown = lines.slice(0, Math.max(1, Math.floor(textHeight / lineHeight)))
-  const blockTop = Math.round((height - shown.length * lineHeight) / 2)
+  const blockHeight = shown.length * lineHeight + (pathLines.length ? pathGap + pathLines.length * pathLineHeight : 0)
+  const blockTop = Math.round((height - Math.min(blockHeight, textHeight)) / 2)
+  ctx.font = fontAt(fontSize)
   shown.forEach((text, index) => ctx.fillText(text, textX, blockTop + index * lineHeight))
+  ctx.font = pathFontAt(pathFont)
+  const pathTop = blockTop + shown.length * lineHeight + pathGap
+  pathLines.forEach((text, index) => {
+    const y = pathTop + index * pathLineHeight
+    if (y + pathFont <= height - margin) ctx.fillText(text, textX, y)
+  })
   return canvas
 }
 
@@ -102,8 +122,14 @@ function canvasBlob(canvas: HTMLCanvasElement, type: string, quality?: number): 
   )
 }
 
-export function renderLabelPng(name: string, url: string, size: LabelSize, dotsPerMm: number): Promise<Blob> {
-  return canvasBlob(drawLabel(name, url, size, dotsPerMm), 'image/png')
+export function renderLabelPng(
+  name: string,
+  url: string,
+  size: LabelSize,
+  dotsPerMm: number,
+  path = '',
+): Promise<Blob> {
+  return canvasBlob(drawLabel(name, url, size, dotsPerMm, path), 'image/png')
 }
 
 /** Метка в JPEG — для вставки в PDF (формат, который PDF принимает без перекодирования). */
@@ -112,8 +138,9 @@ export async function renderLabelJpeg(
   url: string,
   size: LabelSize,
   dotsPerMm: number,
+  path = '',
 ): Promise<{ bytes: Uint8Array; width: number; height: number }> {
-  const canvas = drawLabel(name, url, size, dotsPerMm)
+  const canvas = drawLabel(name, url, size, dotsPerMm, path)
   const blob = await canvasBlob(canvas, 'image/jpeg', 0.95)
   return { bytes: new Uint8Array(await blob.arrayBuffer()), width: canvas.width, height: canvas.height }
 }

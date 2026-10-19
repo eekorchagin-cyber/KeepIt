@@ -1,15 +1,9 @@
 import { ObjectBadge } from '../components/ObjectBadge'
 import { objectLabelFromPlaces } from '../data/icons'
 import type { KeepItState } from '../hooks/useKeepIt'
-import { formatQty } from '../data/units'
 import { PlaceTools } from '../components/PlaceTools'
-import type { ObjectKey, UnitCode } from '../types'
-
-function formatStock(stock: { total: number; unit: UnitCode | null; itemCount: number }): string {
-  if (stock.itemCount === 0) return '0'
-  if (stock.unit) return formatQty(stock.total, stock.unit)
-  return String(stock.total)
-}
+import { BadgeCountToggle } from '../components/BadgeCountToggle'
+import type { ObjectKey } from '../types'
 
 export function ObjectScreen({ state, objectKey }: { state: KeepItState; objectKey: ObjectKey }) {
   const root = state.places.find((place) => place.type === 'object' && place.objectKey === objectKey)
@@ -27,6 +21,7 @@ export function ObjectScreen({ state, objectKey }: { state: KeepItState; objectK
       </div>
 
       <div className="panel stack">
+        <BadgeCountToggle state={state} />
         {root ? (
           <button
             type="button"
@@ -37,7 +32,7 @@ export function ObjectScreen({ state, objectKey }: { state: KeepItState; objectK
               <strong>Весь объект</strong>
               <span className="place-code muted">{root.code}</span>
             </span>
-            <span className="badge">{formatStock(state.stockInSubtree(root.id))}</span>
+            <span className="badge">{state.placeBadge(root.id)}</span>
           </button>
         ) : null}
 
@@ -53,7 +48,7 @@ export function ObjectScreen({ state, objectKey }: { state: KeepItState; objectK
                 <strong>{room.name}</strong>
                 <span className="place-code muted">{room.code}</span>
               </span>
-              <span className="badge">{formatStock(state.stockInSubtree(room.id))}</span>
+              <span className="badge">{state.placeBadge(room.id)}</span>
             </button>
           ))}
         </div>

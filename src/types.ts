@@ -28,6 +28,8 @@ export type MemberRole = 'admin' | 'member' | 'viewer'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 
+export type BadgeCount = 'quantity' | 'positions'
+
 export type SyncStatus = 'local' | 'pending' | 'synced' | 'conflict'
 
 export type Screen =
@@ -150,6 +152,8 @@ export type AppSettings = {
   role: MemberRole
   lastSyncAt: string | null
   fontScale: number
+  /** Что показывать на бейджах мест: сумму количества (гвоздей) или число позиций (упаковок, записей) */
+  badgeCount?: BadgeCount
   /** Редактируемый справочник категорий */
   categories: CategoryNode[]
 }

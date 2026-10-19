@@ -40,7 +40,7 @@ export function MoreScreen({ state }: { state: KeepItState }) {
         <button
           type="button"
           className="list-item"
-          onClick={() => state.navigate({ name: 'print', placeId: root?.id })}
+          onClick={() => state.navigate({ name: 'print', placeId: state.recentPlaceId ?? root?.id })}
         >
           <span>
             <strong>Печать меток</strong>

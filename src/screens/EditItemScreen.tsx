@@ -58,7 +58,8 @@ export function EditItemScreen({ state, itemId }: { state: KeepItState; itemId: 
         note,
         needsFill: false,
       })
-      state.navigate({ name: 'item', itemId })
+      // К месту хранения с этой вещью; карточка и редактирование не остаются в истории «←»
+      state.returnTo({ name: 'place', placeId: item!.placeId })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка')
     } finally {
@@ -146,7 +147,7 @@ export function EditItemScreen({ state, itemId }: { state: KeepItState; itemId: 
             type="button"
             className="secondary"
             disabled={busy}
-            onClick={() => state.navigate({ name: 'item', itemId })}
+            onClick={() => state.goBack()}
           >
             Отмена
           </button>

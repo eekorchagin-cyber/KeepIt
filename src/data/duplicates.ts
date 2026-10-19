@@ -11,6 +11,31 @@ export type DuplicateGroup = {
   keeperId: string
 }
 
+/** Подпись набора копий: если копий станет больше или меньше, группа снова считается дублями */
+export function duplicateSignature(itemIds: string[]): string {
+  return [...itemIds].sort().join(',')
+}
+
+const IGNORED_KEY = 'keepit-duplicates-kept'
+
+/** Группы, которые пользователь решил оставить как разные вещи */
+export function readKeptDuplicates(): Set<string> {
+  try {
+    const raw = localStorage.getItem(IGNORED_KEY)
+    return new Set(raw ? (JSON.parse(raw) as string[]) : [])
+  } catch {
+    return new Set()
+  }
+}
+
+export function writeKeptDuplicates(keys: Set<string>) {
+  try {
+    localStorage.setItem(IGNORED_KEY, JSON.stringify([...keys]))
+  } catch {
+    // приватный режим — решение живёт до закрытия программы
+  }
+}
+
 function isLent(item: Item): boolean {
   return Boolean(item.lentTo?.trim())
 }

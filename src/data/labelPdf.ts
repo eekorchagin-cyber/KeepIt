@@ -90,12 +90,12 @@ function buildPdf(images: JpegImage[], pages: Page[]): Blob {
  * лента — каждая метка на своей странице 62×40 мм, A4 — по 3 в ряд с пунктиром для разрезания.
  */
 export async function renderLabelsPdf(
-  labels: Array<{ name: string; url: string }>,
+  labels: Array<{ name: string; url: string; path?: string }>,
   method: Exclude<PrinterMethod, 'image'>,
 ): Promise<Blob> {
   const labelSize = method === 'airprint-tape' ? TAPE : A4_LABEL
   const images = await Promise.all(
-    labels.map((label) => renderLabelJpeg(label.name, label.url, labelSize, DOTS_PER_MM)),
+    labels.map((label) => renderLabelJpeg(label.name, label.url, labelSize, DOTS_PER_MM, label.path)),
   )
 
   if (method === 'airprint-tape') {
