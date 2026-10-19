@@ -2,7 +2,7 @@
   "name": "KeepIt — домашнее хранение",
   "short_name": "KeepIt",
   "description": "Учёт домашних вещей и расходников",
-  "start_url": "./?v=20261019-2058",
+  "start_url": "./?v=20261019-2149",
   "display": "standalone",
   "background_color": "#b9905e",
   "theme_color": "#b9905e",
