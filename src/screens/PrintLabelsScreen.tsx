@@ -85,10 +85,15 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     return room?.id ?? path[1]?.id ?? path[0]?.id ?? id
   }
 
+  /** Помещение или объект: для них — «Все места в помещении» с выбором помещения */
+  const isRoomLike = (place: Place) => place.type === 'object' || place.type === 'room' || roomOf(place.id) === place.id
+  /** Стеллаж, шкаф, полка, коробка: вместо помещения печатаем это место и всё, что в нём */
+  const nestedRoot = start && !isRoomLike(start) ? start : undefined
+
   const [mode, setMode] = useState<PrintMode>(() =>
-    !start || start.type === 'room' || start.type === 'object' ? 'room' : 'single',
+    !start || isRoomLike(start) || state.childPlaces(start.id).length > 0 ? 'room' : 'single',
   )
-  const [roomId, setRoomId] = useState(() => (startId ? roomOf(startId) : ''))
+  const [roomId, setRoomId] = useState(() => (nestedRoot ? nestedRoot.id : startId ? roomOf(startId) : ''))
   const [singleId, setSingleId] = useState(startId)
   const [printerId, setPrinterId] = useState(() => findPrinter(readStored(PRINTER_KEY) ?? DEFAULT_PRINTER_ID).id)
   const [sizeIndex, setSizeIndex] = useState(() => Number(readStored(SIZE_KEY) ?? 0) || 0)
@@ -346,7 +351,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
         <strong>Что печатать</strong>
         <div className="split-row">
           <button type="button" className={mode === 'room' ? undefined : 'secondary'} onClick={() => setMode('room')}>
-            Все места в помещении
+            {nestedRoot ? 'Все вложенные места хранения' : 'Все места в помещении'}
           </button>
           <button
             type="button"
@@ -356,7 +361,12 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
             Одно место
           </button>
         </div>
-        {mode === 'room' ? (
+        {mode === 'room' && nestedRoot ? (
+          <div className="stack-tight">
+            <strong>{nestedRoot.name}</strong>
+            <span className="place-code muted">{parentPath(nestedRoot.id)}</span>
+          </div>
+        ) : mode === 'room' ? (
           <label className="field">
             Помещение
             <select value={roomId} onChange={(event) => setRoomId(event.target.value)}>
@@ -372,7 +382,9 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
         )}
         {mode === 'room' ? (
           <p className="muted">
-            Метки на помещение и все места в нём на любой глубине (стеллажи, полки, коробки):{' '}
+            {nestedRoot
+              ? `Метки на «${nestedRoot.name}» и все места в нём на любой глубине (полки, коробки): `
+              : 'Метки на помещение и все места в нём на любой глубине (стеллажи, полки, коробки): '}
             {sourcePlaces.length}. На этикетке — QR-код, название места и путь к нему.
           </p>
         ) : (

@@ -57,6 +57,8 @@ export function SearchScreen({ state }: { state: KeepItState }) {
     lastSearch.sub = ''
     setCategoryState(next)
     setSubState('')
+    // Строка поиска переходит от поиска категории к поиску вещи в ней (и обратно)
+    setQuery('')
   }
   function setSub(next: string) {
     lastSearch.sub = next
@@ -81,15 +83,21 @@ export function SearchScreen({ state }: { state: KeepItState }) {
             По категории
           </button>
         </div>
-        {mode === 'name' || category === null ? (
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={mode === 'name' ? 'Название вещи: дрель, топор…' : 'Найти категорию: инструменты…'}
-            aria-label={mode === 'name' ? 'Поиск по названию' : 'Поиск категории'}
-            autoFocus
-          />
-        ) : null}
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={
+            mode === 'name'
+              ? 'Название вещи: дрель, топор…'
+              : category === null
+                ? 'Найти категорию: инструменты…'
+                : `Название вещи в «${categoryTitle(items, category)}»…`
+          }
+          aria-label={
+            mode === 'name' ? 'Поиск по названию' : category === null ? 'Поиск категории' : 'Поиск вещи в категории'
+          }
+          autoFocus
+        />
       </div>
 
       {mode === 'name' ? (
@@ -101,6 +109,7 @@ export function SearchScreen({ state }: { state: KeepItState }) {
           state={state}
           items={items}
           category={category}
+          q={q}
           sub={sub}
           onBack={() => setCategory(null)}
           onSub={setSub}
@@ -165,10 +174,21 @@ function CategoryList({ items, q, onPick }: { items: Item[]; q: string; onPick: 
   )
 }
 
+function inCategoryOf(items: Item[], category: string): Item[] {
+  return items.filter((item) =>
+    category === NO_CATEGORY ? !item.category.trim() : normalizeCategoryName(item.category) === category,
+  )
+}
+
+function categoryTitle(items: Item[], category: string): string {
+  return category === NO_CATEGORY ? 'Без категории' : (inCategoryOf(items, category)[0]?.category ?? category)
+}
+
 function CategoryResults({
   state,
   items,
   category,
+  q,
   sub,
   onBack,
   onSub,
@@ -176,23 +196,25 @@ function CategoryResults({
   state: KeepItState
   items: Item[]
   category: string
+  /** Поиск вещи по названию внутри категории */
+  q: string
   sub: string
   onBack: () => void
   onSub: (sub: string) => void
 }) {
-  const inCategory = items.filter((item) =>
-    category === NO_CATEGORY ? !item.category.trim() : normalizeCategoryName(item.category) === category,
-  )
-  const title = category === NO_CATEGORY ? 'Без категории' : inCategory[0]?.category ?? category
+  const inCategory = inCategoryOf(items, category)
+  const title = categoryTitle(items, category)
   const subs = new Map<string, number>()
   for (const item of inCategory) {
     const name = item.subcategory.trim()
     if (name) subs.set(name, (subs.get(name) ?? 0) + 1)
   }
   const withoutSub = inCategory.filter((item) => !item.subcategory.trim()).length
-  const results = sub
-    ? inCategory.filter((item) => normalizeCategoryName(item.subcategory) === normalizeCategoryName(sub))
-    : inCategory
+  const results = (
+    sub
+      ? inCategory.filter((item) => normalizeCategoryName(item.subcategory) === normalizeCategoryName(sub))
+      : inCategory
+  ).filter((item) => !q || normalizeSearch(item.name).includes(q))
 
   return (
     <div className="panel stack">
@@ -223,7 +245,8 @@ function CategoryResults({
         </div>
       ) : null}
       <div className="list">
-        {results.length === 0 ? <p className="muted">Вещей нет</p> : null}
+        {q ? <span className="muted">Найдено: {results.length}</span> : null}
+        {results.length === 0 ? <p className="muted">{q ? 'Ничего не найдено в этой категории' : 'Вещей нет'}</p> : null}
         {results.map((item) => (
           <ItemRow key={item.id} state={state} item={item} />
         ))}
