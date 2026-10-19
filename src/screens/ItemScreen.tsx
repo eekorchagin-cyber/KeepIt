@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CategorySheet } from '../components/CategoryPicker'
+import { ChoiceSelect } from '../components/ChoiceSelect'
 import { ModeCategory } from '../components/ModeCategory'
 import { ServicePanel } from '../components/ServicePanel'
 import { MoveItemSheet } from '../components/MoveItemSheet'
@@ -366,13 +367,7 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
               </label>
               <label className="field">
                 Тип
-                <select value={placeType} onChange={(e) => setPlaceType(e.target.value as PlaceType)}>
-                  {PLACE_TYPES.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                <ChoiceSelect title="Тип места" value={placeType} options={PLACE_TYPES} onChange={setPlaceType} />
               </label>
               {error ? <p className="error">{error}</p> : null}
               <button type="button" disabled={busy || !placeName.trim()} onClick={() => void submitToPlace()}>

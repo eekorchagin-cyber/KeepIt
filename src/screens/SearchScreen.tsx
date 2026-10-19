@@ -57,8 +57,18 @@ export function SearchScreen({ state }: { state: KeepItState }) {
     lastSearch.sub = ''
     setCategoryState(next)
     setSubState('')
-    // Строка поиска переходит от поиска категории к поиску вещи в ней (и обратно)
     setQuery('')
+  }
+
+  /** В режиме «По категории» строка всегда ищет категорию: ввод при выбранной — снова список категорий */
+  function onQueryChange(value: string) {
+    if (mode === 'category' && category !== null) {
+      lastSearch.category = null
+      lastSearch.sub = ''
+      setCategoryState(null)
+      setSubState('')
+    }
+    setQuery(value)
   }
   function setSub(next: string) {
     lastSearch.sub = next
@@ -85,17 +95,15 @@ export function SearchScreen({ state }: { state: KeepItState }) {
         </div>
         <input
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => onQueryChange(e.target.value)}
           placeholder={
             mode === 'name'
               ? 'Название вещи: дрель, топор…'
               : category === null
                 ? 'Найти категорию: инструменты…'
-                : `Название вещи в «${categoryTitle(items, category)}»…`
+                : 'Другая категория: оборудование…'
           }
-          aria-label={
-            mode === 'name' ? 'Поиск по названию' : category === null ? 'Поиск категории' : 'Поиск вещи в категории'
-          }
+          aria-label={mode === 'name' ? 'Поиск по названию' : 'Поиск категории'}
           autoFocus
         />
       </div>
@@ -109,7 +117,6 @@ export function SearchScreen({ state }: { state: KeepItState }) {
           state={state}
           items={items}
           category={category}
-          q={q}
           sub={sub}
           onBack={() => setCategory(null)}
           onSub={setSub}
@@ -188,7 +195,6 @@ function CategoryResults({
   state,
   items,
   category,
-  q,
   sub,
   onBack,
   onSub,
@@ -196,8 +202,6 @@ function CategoryResults({
   state: KeepItState
   items: Item[]
   category: string
-  /** Поиск вещи по названию внутри категории */
-  q: string
   sub: string
   onBack: () => void
   onSub: (sub: string) => void
@@ -210,11 +214,9 @@ function CategoryResults({
     if (name) subs.set(name, (subs.get(name) ?? 0) + 1)
   }
   const withoutSub = inCategory.filter((item) => !item.subcategory.trim()).length
-  const results = (
-    sub
-      ? inCategory.filter((item) => normalizeCategoryName(item.subcategory) === normalizeCategoryName(sub))
-      : inCategory
-  ).filter((item) => !q || normalizeSearch(item.name).includes(q))
+  const results = sub
+    ? inCategory.filter((item) => normalizeCategoryName(item.subcategory) === normalizeCategoryName(sub))
+    : inCategory
 
   return (
     <div className="panel stack">
@@ -245,8 +247,7 @@ function CategoryResults({
         </div>
       ) : null}
       <div className="list">
-        {q ? <span className="muted">Найдено: {results.length}</span> : null}
-        {results.length === 0 ? <p className="muted">{q ? 'Ничего не найдено в этой категории' : 'Вещей нет'}</p> : null}
+        {results.length === 0 ? <p className="muted">Вещей нет</p> : null}
         {results.map((item) => (
           <ItemRow key={item.id} state={state} item={item} />
         ))}

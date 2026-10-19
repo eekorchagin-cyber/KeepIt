@@ -10,6 +10,12 @@ export const MODE_LABEL: Record<AccountingMode, string> = {
   consumable: 'Расходный материал',
 }
 
+/** Варианты режима учёта для выбора в карточке вещи */
+export const MODE_OPTIONS: Array<{ value: AccountingMode; label: string; hint: string }> = [
+  { value: 'durable', label: MODE_LABEL.durable, hint: 'Инструменты, техника — учёт в штуках' },
+  { value: 'consumable', label: MODE_LABEL.consumable, hint: 'Изолента, гвозди, краска — тратится, остаток меняется' },
+]
+
 export function categoryText(category: string, subcategory = ''): string {
   return [category, subcategory].filter(Boolean).join(' / ')
 }

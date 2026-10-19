@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ChoiceSelect } from '../components/ChoiceSelect'
 import { ModeCategory } from '../components/ModeCategory'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { movesWithContents, normalizeSearch } from '../data/repository'
@@ -156,14 +157,13 @@ export function GatherItemsScreen({ state, placeId }: { state: KeepItState; plac
         {otherPlaces.length > 0 ? (
           <label className="field">
             Другое место
-            <select value={sourceIsOther ? (sourceId ?? '') : ''} onChange={(event) => chooseSource(event.target.value)}>
-              <option value="">— выберите место —</option>
-              {otherPlaces.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.label}
-                </option>
-              ))}
-            </select>
+            <ChoiceSelect
+              title="Откуда взять"
+              value={sourceIsOther ? (sourceId ?? '') : ''}
+              placeholder="— выберите место —"
+              options={otherPlaces.map((entry) => ({ value: entry.id, label: entry.label }))}
+              onChange={chooseSource}
+            />
           </label>
         ) : null}
       </div>

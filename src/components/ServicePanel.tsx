@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { KeepItState } from '../hooks/useKeepIt'
+import { ChoiceSelect } from './ChoiceSelect'
 import {
   SERVICE_INTERVALS,
   SERVICE_SOON_DAYS,
@@ -138,13 +139,15 @@ export function ServicePanel({ state, item }: { state: KeepItState; item: Item }
               </label>
               <label className="field">
                 Периодичность
-                <select value={interval} onChange={(e) => changeInterval(Number(e.target.value))}>
-                  {SERVICE_INTERVALS.map((months) => (
-                    <option key={months} value={months}>
-                      {months === 0 ? 'Не задана (следующее — вручную)' : intervalLabel(months)}
-                    </option>
-                  ))}
-                </select>
+                <ChoiceSelect
+                  title="Периодичность ТО"
+                  value={interval}
+                  options={SERVICE_INTERVALS.map((months) => ({
+                    value: months,
+                    label: months === 0 ? 'Не задана (следующее — вручную)' : intervalLabel(months),
+                  }))}
+                  onChange={changeInterval}
+                />
               </label>
               <label className="field">
                 Следующее ТО

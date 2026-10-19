@@ -185,7 +185,8 @@ export async function downloadBackup(backup: KeepItBackup): Promise<void> {
 
   if (canShareFiles) {
     try {
-      await navigator.share({ files: [file], title: 'KeepIt', text: filename })
+      // Только файл, без текста: иначе iPhone прячет приложения, принимающие лишь файлы (например, Яндекс Диск)
+      await navigator.share({ files: [file], title: 'KeepIt' })
       return
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return

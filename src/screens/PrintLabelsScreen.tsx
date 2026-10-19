@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createPortal, flushSync } from 'react-dom'
 import QRCode from 'qrcode'
 import { PlaceStepPicker } from '../components/PlaceStepPicker'
+import { ChoiceSelect } from '../components/ChoiceSelect'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { placeUrl } from '../data/placeCodes'
 import { canHoldFreeLabels } from '../data/repository'
@@ -369,13 +370,12 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
         ) : mode === 'room' ? (
           <label className="field">
             Помещение
-            <select value={roomId} onChange={(event) => setRoomId(event.target.value)}>
-              {roomOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <ChoiceSelect
+              title="Помещение"
+              value={roomId}
+              options={roomOptions.map((option) => ({ value: option.id, label: option.label }))}
+              onChange={setRoomId}
+            />
           </label>
         ) : (
           <PlaceStepPicker state={state} value={singleId} onChange={setSingleId} />
@@ -396,34 +396,28 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
         <strong>Принтер</strong>
         <label className="field">
           Модель
-          <select value={printer.id} onChange={(event) => choosePrinter(event.target.value)}>
-            <optgroup label="AirPrint — печать прямо из KeepIt">
-              {PRINTERS.filter((entry) => entry.method !== 'image').map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.name}
-                </option>
-              ))}
-            </optgroup>
-            <optgroup label="Через приложение принтера">
-              {PRINTERS.filter((entry) => entry.method === 'image').map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.name}
-                </option>
-              ))}
-            </optgroup>
-          </select>
+          <ChoiceSelect
+            title="Принтер"
+            value={printer.id}
+            options={PRINTERS.map((entry) => ({
+              value: entry.id,
+              label: entry.name,
+              hint: entry.kind,
+              group: entry.method === 'image' ? 'Через приложение принтера' : 'AirPrint — печать прямо из KeepIt',
+            }))}
+            onChange={choosePrinter}
+          />
         </label>
         <span className="muted">{printer.kind}</span>
         {!isAirPrint ? (
           <label className="field">
             Размер этикетки
-            <select value={sizeIndex} onChange={(event) => chooseSize(Number(event.target.value))}>
-              {printer.sizes.map((entry, index) => (
-                <option key={sizeLabel(entry)} value={index}>
-                  {sizeLabel(entry)}
-                </option>
-              ))}
-            </select>
+            <ChoiceSelect
+              title="Размер этикетки"
+              value={sizeIndex}
+              options={printer.sizes.map((entry, index) => ({ value: index, label: sizeLabel(entry) }))}
+              onChange={chooseSize}
+            />
           </label>
         ) : null}
 
@@ -493,13 +487,12 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
               </p>
               <label className="field">
                 Сколько свободных меток
-                <select value={freeCount} onChange={(event) => setFreeCount(Number(event.target.value))}>
-                  {FREE_LABEL_COUNTS.map((count) => (
-                    <option key={count} value={count}>
-                      {count}
-                    </option>
-                  ))}
-                </select>
+                <ChoiceSelect
+                  title="Сколько свободных меток"
+                  value={freeCount}
+                  options={FREE_LABEL_COUNTS.map((count) => ({ value: count, label: String(count) }))}
+                  onChange={setFreeCount}
+                />
               </label>
               <button type="button" className="secondary" disabled={busy} onClick={() => void withFree(false)}>
                 Нет, только выбранные ({printList.length})

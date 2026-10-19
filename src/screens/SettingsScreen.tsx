@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { KeepItState } from '../hooks/useKeepIt'
+import { ChoiceSelect } from '../components/ChoiceSelect'
 import {
   disableUpdateNotifications,
   enableUpdateNotifications,
@@ -38,14 +39,16 @@ export function SettingsScreen({ state }: { state: KeepItState }) {
 
         <label className="field">
           Тема
-          <select
+          <ChoiceSelect<ThemeMode>
+            title="Тема"
             value={state.settings?.theme ?? 'system'}
-            onChange={(e) => void state.setTheme(e.target.value as ThemeMode)}
-          >
-            <option value="system">Как в системе</option>
-            <option value="light">Светлая</option>
-            <option value="dark">Тёмная</option>
-          </select>
+            options={[
+              { value: 'system', label: 'Как в системе', hint: 'Светлая днём, тёмная ночью — как на телефоне' },
+              { value: 'light', label: 'Светлая' },
+              { value: 'dark', label: 'Тёмная' },
+            ]}
+            onChange={(theme) => void state.setTheme(theme)}
+          />
         </label>
 
         <p className="muted">

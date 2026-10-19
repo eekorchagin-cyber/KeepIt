@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ChoiceSelect } from '../components/ChoiceSelect'
 import { MoveQrScan } from '../components/MoveItemSheet'
 import type { KeepItState } from '../hooks/useKeepIt'
 import {
@@ -751,13 +752,7 @@ function FoundForm({
             </label>
             <label className="field">
               Единица
-              <select value={unit} onChange={(event) => setUnitChoice(event.target.value as UnitCode)}>
-                {unitOptionsFor(mode).map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              <ChoiceSelect title="Единица" value={unit} options={unitOptionsFor(mode)} onChange={setUnitChoice} />
             </label>
           </div>
           <button type="button" disabled={quantity === null} onClick={addNew}>

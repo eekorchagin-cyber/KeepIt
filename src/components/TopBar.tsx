@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { ChoiceSelect } from './ChoiceSelect'
 import { DataExchange } from './DataExchange'
 import { MoveItemSheet, MovePlaceSheet } from './MoveItemSheet'
 import { ObjectAppearanceSheet, appearanceFromPlace } from './ObjectAppearanceSheet'
@@ -356,13 +357,7 @@ export function TopBar({ state }: { state: KeepItState }) {
           </label>
           <label className="field">
             Тип
-            <select value={placeType} onChange={(event) => setPlaceType(event.target.value as PlaceType)}>
-              {typeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <ChoiceSelect title="Тип места" value={placeType} options={typeOptions} onChange={setPlaceType} />
           </label>
           <button
             type="button"

@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { CategoryPicker } from '../components/CategoryPicker'
+import { ChoiceSelect } from '../components/ChoiceSelect'
+import { MODE_OPTIONS } from '../data/modes'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { findName } from '../data/itemNames'
 import { normalizeSearch } from '../data/repository'
@@ -172,18 +174,16 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
 
         <label className="field">
           Режим учёта
-          <select
+          <ChoiceSelect
+            title="Режим учёта"
             value={mode}
-            onChange={(e) => {
-              const next = e.target.value as AccountingMode
+            options={MODE_OPTIONS}
+            onChange={(next) => {
               setMode(next)
               setUnit((current) => unitForMode(next, current))
               setQuantity(next === 'durable' ? '1' : '0')
             }}
-          >
-            <option value="durable">Постоянное хранение</option>
-            <option value="consumable">Расходный материал</option>
-          </select>
+          />
         </label>
 
         <CategoryPicker
@@ -208,13 +208,7 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
           </label>
           <label className="field" style={{ width: 110 }}>
             Ед.
-            <select value={unit} onChange={(e) => setUnit(e.target.value as UnitCode)}>
-              {unitOptionsFor(mode).map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <ChoiceSelect title="Единица" value={unit} options={unitOptionsFor(mode)} onChange={setUnit} />
           </label>
         </div>
 

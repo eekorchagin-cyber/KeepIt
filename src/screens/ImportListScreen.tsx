@@ -12,9 +12,10 @@ import {
 } from '../data/listImport/parseList'
 import { modeForQuantity } from '../data/listImport/quantity'
 import { ProgressPanel } from '../components/ProgressPanel'
+import { ChoiceSelect } from '../components/ChoiceSelect'
 import type { ImportPlan, ImportProgress, ImportResult } from '../data/repository'
 import { UNIT_OPTIONS, formatQty } from '../data/units'
-import type { Item, Place, UnitCode } from '../types'
+import type { Item, Place } from '../types'
 
 type RowItem = DraftItem & { id: string; enabled: boolean; qtyText: string }
 type RowBlock = { id: string; kind: 'box' | 'items'; name: string; items: RowItem[] }
@@ -456,17 +457,14 @@ export function ImportListScreen({ state, placeId }: { state: KeepItState; place
                   inputMode="decimal"
                   onChange={(e) => updateItem(block.id, item.id, { qtyText: e.target.value })}
                 />
-                <select
+                <ChoiceSelect
+                  title={`Единица: ${item.name || 'вещь'}`}
+                  ariaLabel="Единица"
+                  compact
                   value={item.unit}
-                  aria-label="Единица"
-                  onChange={(e) => updateItem(block.id, item.id, { unit: e.target.value as UnitCode })}
-                >
-                  {UNIT_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  options={UNIT_OPTIONS}
+                  onChange={(unit) => updateItem(block.id, item.id, { unit })}
+                />
                 {item.warning ? <span className="import-warning">Не распознано — {item.warning}</span> : null}
               </div>
             ))}
