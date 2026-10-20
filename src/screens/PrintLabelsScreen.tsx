@@ -392,7 +392,21 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
   /** Куда класть свободные метки: выбранное помещение или помещение выбранного места. */
   const freeParent = state.findPlace(mode === 'room' ? roomId : roomOf(singleId))
   // Не во весь объект: иначе заготовки встают в один ряд с помещениями
-  const canCreateFree = Boolean(freeParent && freeParent.type !== 'object' && canHoldFreeLabels(freeParent.type))
+  const canCreateFree = Boolean(freeParent && canHoldFreeLabels(freeParent.type))
+  /** Сколько этикеток останется пустыми на последнем листе A4 — их удобно занять свободными метками */
+  const sheetRemainder =
+    printer.method === 'airprint-a4' && printList.length > 0
+      ? (sheet.cols * sheet.rows - (printList.length % (sheet.cols * sheet.rows))) % (sheet.cols * sheet.rows)
+      : 0
+  const freeCountOptions = [
+    ...(sheetRemainder > 0
+      ? [{ value: sheetRemainder, label: `${sheetRemainder} — дополнить лист до конца`, hint: sheet.label }]
+      : []),
+    ...FREE_LABEL_COUNTS.filter((count) => count !== sheetRemainder).map((count) => ({
+      value: count,
+      label: String(count),
+    })),
+  ]
   const freeParentPath = freeParent
     ? state
         .pathFor(freeParent.id)
@@ -418,6 +432,9 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     setImages([])
     setPdf(null)
     if (canCreateFree && !freeDecided) {
+      // По умолчанию — дополнить последний лист, чтобы не оставалось пустых этикеток
+      if (sheetRemainder > 0) setFreeCount(sheetRemainder)
+      else if (!FREE_LABEL_COUNTS.includes(freeCount)) setFreeCount(12)
       setAskFree(target)
       return
     }
@@ -679,7 +696,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
                 <ChoiceSelect
                   title="Сколько свободных меток"
                   value={freeCount}
-                  options={FREE_LABEL_COUNTS.map((count) => ({ value: count, label: String(count) }))}
+                  options={freeCountOptions}
                   onChange={setFreeCount}
                 />
               </label>
