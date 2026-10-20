@@ -120,7 +120,7 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
     setError(null)
     try {
       await state.removeItems([item.id])
-      state.jump({ name: 'place', placeId })
+      state.leaveDeletedItem(item.id, placeId)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка')
       setBusy(false)

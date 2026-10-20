@@ -6,14 +6,34 @@ import { ChoiceSelect } from '../components/ChoiceSelect'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { placeUrl } from '../data/placeCodes'
 import { canHoldFreeLabels } from '../data/repository'
-import { renderLabelPng, safeFileName, shareFiles, shareLabelImages } from '../data/labelImage'
-import { renderLabelsPdf } from '../data/labelPdf'
+import { renderLabelDataUrl, renderLabelPng, safeFileName, shareFiles, shareLabelImages } from '../data/labelImage'
+import { LABEL_DOTS_PER_MM, renderLabelsPdf } from '../data/labelPdf'
+import {
+  A4,
+  A4_LAYOUTS,
+  DEFAULT_SHEET_ID,
+  TAPE_LABEL,
+  TEXT_PLACEMENT_OPTIONS,
+  findSheet,
+  sheetPages,
+  type TextPlacement,
+} from '../data/labelSheets'
 import { DEFAULT_PRINTER_ID, PRINTERS, findPrinter, sizeLabel, type LabelSize } from '../data/printers'
 import type { Place } from '../types'
 
 const FREE_LABEL_COUNTS = [6, 12, 24]
 const PRINTER_KEY = 'keepit-printer'
 const SIZE_KEY = 'keepit-label-size'
+const SHEET_KEY = 'keepit-a4-sheet'
+const PLACEMENT_KEY = 'keepit-label-text'
+
+/** Готовые к печати страницы: картинки меток с положением в мм — та же раскладка, что в PDF */
+type PrintJob = {
+  pageWidthMm: number
+  pageHeightMm: number
+  cutLines: boolean
+  pages: Array<Array<{ id: string; src: string; x: number; y: number; w: number; h: number }>>
+}
 
 type PrintMode = 'room' | 'single'
 /** Куда выводить метки AirPrint-принтера: системное окно печати или PDF-файл */
@@ -22,9 +42,16 @@ type OutputTarget = 'print' | 'pdf'
 type LabelView = Place & { qrDataUrl: string }
 type LabelImage = { id: string; name: string; blob: Blob; previewUrl: string }
 
-const AIRPRINT_PAGE: Record<string, string> = {
-  'airprint-tape': '@page { size: 62mm 40mm; margin: 2mm; }',
-  'airprint-a4': '@page { size: A4; margin: 10mm; }',
+/** Дождаться загрузки картинок слоя печати (не дольше секунды), чтобы на листе не было пустых мест */
+function waitForImages(images: NodeListOf<HTMLImageElement>): Promise<void> {
+  const pending = [...images].filter((image) => !image.complete)
+  if (pending.length === 0) return Promise.resolve()
+  return Promise.race([
+    Promise.all(
+      pending.map((image) => new Promise<void>((resolve) => image.addEventListener('load', () => resolve(), { once: true }))),
+    ).then(() => undefined),
+    new Promise<void>((resolve) => window.setTimeout(resolve, 1000)),
+  ])
 }
 
 function readStored(key: string): string | null {
@@ -98,6 +125,11 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
   const [singleId, setSingleId] = useState(startId)
   const [printerId, setPrinterId] = useState(() => findPrinter(readStored(PRINTER_KEY) ?? DEFAULT_PRINTER_ID).id)
   const [sizeIndex, setSizeIndex] = useState(() => Number(readStored(SIZE_KEY) ?? 0) || 0)
+  const [sheetId, setSheetId] = useState(() => findSheet(readStored(SHEET_KEY) ?? DEFAULT_SHEET_ID).id)
+  const [placement, setPlacement] = useState<TextPlacement>(() =>
+    readStored(PLACEMENT_KEY) === 'below' ? 'below' : 'right',
+  )
+  const [printJob, setPrintJob] = useState<PrintJob | null>(null)
   const [labels, setLabels] = useState<LabelView[]>([])
   const [images, setImages] = useState<LabelImage[]>([])
   const [busy, setBusy] = useState(false)
@@ -113,6 +145,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
   const printer = findPrinter(printerId)
   const size: LabelSize = printer.sizes[sizeIndex] ?? printer.sizes[0]!
   const isAirPrint = printer.method !== 'image'
+  const sheet = findSheet(sheetId)
 
   const objectKey = start?.objectKey
   const objectPlaces = state.places.filter((place) => place.objectKey === objectKey)
@@ -172,7 +205,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
   }
 
   function labelSetKey(list: Place[]): string {
-    return `${printer.id}:${list
+    return `${printer.id}:${sheet.id}:${placement}:${list
       .map((place) => place.id)
       .sort()
       .join(',')}`
@@ -206,8 +239,54 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     }
   }, [images])
 
+  /** Страницы для системного окна печати — те же картинки и та же раскладка, что в PDF */
+  function buildPrintJob(list: Place[]): PrintJob {
+    if (printer.method === 'airprint-tape') {
+      return {
+        pageWidthMm: TAPE_LABEL.widthMm,
+        pageHeightMm: TAPE_LABEL.heightMm,
+        cutLines: false,
+        pages: list.map((place) => [
+          {
+            id: place.id,
+            src: renderLabelDataUrl(
+              place.name,
+              placeUrl(place.id),
+              TAPE_LABEL,
+              LABEL_DOTS_PER_MM,
+              parentPath(place.id),
+              placement,
+            ),
+            x: 0,
+            y: 0,
+            w: TAPE_LABEL.widthMm,
+            h: TAPE_LABEL.heightMm,
+          },
+        ]),
+      }
+    }
+    return {
+      pageWidthMm: A4.widthMm,
+      pageHeightMm: A4.heightMm,
+      cutLines: sheet.cutLines,
+      pages: sheetPages(sheet, list.length).map((cells) =>
+        cells.map((cell) => {
+          const place = list[cell.index]!
+          return {
+            id: place.id,
+            src: renderLabelDataUrl(place.name, placeUrl(place.id), sheet, LABEL_DOTS_PER_MM, parentPath(place.id), placement),
+            x: cell.x,
+            y: cell.y,
+            w: cell.w,
+            h: cell.h,
+          }
+        }),
+      ),
+    }
+  }
+
   /**
-   * AirPrint — системное окно печати (недостающие QR дорисовываются и сразу попадают в слой печати);
+   * AirPrint — системное окно печати или PDF: одни и те же картинки меток в одной раскладке;
    * термопринтер — картинки точно под размер этикетки.
    */
   async function output(list: Place[], target: OutputTarget) {
@@ -218,6 +297,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
         const blob = await renderLabelsPdf(
           list.map((place) => ({ name: place.name, url: placeUrl(place.id), path: parentPath(place.id) })),
           printer.method === 'airprint-tape' ? 'airprint-tape' : 'airprint-a4',
+          { sheet, placement },
         )
         const title = list.length === 1 ? safeFileName(list[0]!.name) : `${list.length} шт.`
         setPdf({
@@ -228,27 +308,22 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
         return
       }
       if (isAirPrint) {
-        const known = new Map(labels.map((label) => [label.id, label]))
-        const full = await Promise.all(
-          list.map(
-            async (place) =>
-              known.get(place.id) ?? {
-                ...place,
-                qrDataUrl: await QRCode.toDataURL(placeUrl(place.id), {
-                  margin: 1,
-                  width: 320,
-                  errorCorrectionLevel: 'M',
-                }),
-              },
-          ),
-        )
-        flushSync(() => setLabels(full))
+        const job = buildPrintJob(list)
+        flushSync(() => setPrintJob(job))
+        await waitForImages(document.querySelectorAll<HTMLImageElement>('.print-root img'))
         window.print()
         return
       }
       const prepared = await Promise.all(
         list.map(async (place) => {
-          const blob = await renderLabelPng(place.name, placeUrl(place.id), size, printer.dotsPerMm, parentPath(place.id))
+          const blob = await renderLabelPng(
+            place.name,
+            placeUrl(place.id),
+            size,
+            printer.dotsPerMm,
+            parentPath(place.id),
+            placement,
+          )
           return { id: place.id, name: place.name, blob, previewUrl: URL.createObjectURL(blob) }
         }),
       )
@@ -269,6 +344,21 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     setMessage(null)
     writeStored(PRINTER_KEY, id)
     writeStored(SIZE_KEY, '0')
+  }
+
+  function chooseSheet(id: string) {
+    setSheetId(id)
+    setPdf(null)
+    setMessage(null)
+    writeStored(SHEET_KEY, id)
+  }
+
+  function choosePlacement(next: TextPlacement) {
+    setPlacement(next)
+    setImages([])
+    setPdf(null)
+    setMessage(null)
+    writeStored(PLACEMENT_KEY, next)
   }
 
   function chooseSize(index: number) {
@@ -420,6 +510,33 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
             />
           </label>
         ) : null}
+        {printer.method === 'airprint-a4' ? (
+          <label className="field">
+            Лист этикеток A4
+            <ChoiceSelect
+              title="Лист этикеток A4"
+              value={sheet.id}
+              options={A4_LAYOUTS.map((layout) => ({ value: layout.id, label: layout.label, hint: layout.hint }))}
+              onChange={chooseSheet}
+            />
+          </label>
+        ) : null}
+        <div className="stack-tight">
+          <span className="field-caption">Текст на этикетке</span>
+          <div className="split-row">
+            {TEXT_PLACEMENT_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={placement === option.value ? undefined : 'secondary'}
+                aria-pressed={placement === option.value}
+                onClick={() => choosePlacement(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <strong>Как печатать</strong>
         <ol className="print-steps">
@@ -505,30 +622,27 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
         </div>
       ) : null}
 
-      {isAirPrint
+      {isAirPrint && printJob
         ? createPortal(
-            <div
-              className={`print-root ${printer.method === 'airprint-tape' ? 'print-tape62' : 'print-a4'}`}
-              aria-hidden
-            >
-              <style>{`@media print { ${AIRPRINT_PAGE[printer.method]} }`}</style>
-              {labels.map((label) =>
-                printer.method === 'airprint-tape' ? (
-                  <div key={label.id} className="tape-label">
-                    <img src={label.qrDataUrl} alt="" />
-                    <div className="tape-text">
-                      <div className="tape-name">{label.name}</div>
-                      {parentPath(label.id) ? <div className="tape-path">{parentPath(label.id)}</div> : null}
-                    </div>
-                  </div>
-                ) : (
-                  <div key={label.id} className="label-card">
-                    <img src={label.qrDataUrl} alt="" />
-                    <div className="label-name">{label.name}</div>
-                    {parentPath(label.id) ? <div className="label-path">{parentPath(label.id)}</div> : null}
-                  </div>
-                ),
-              )}
+            <div className="print-root" aria-hidden>
+              <style>{`@media print { @page { size: ${printJob.pageWidthMm}mm ${printJob.pageHeightMm}mm; margin: 0; } }`}</style>
+              {printJob.pages.map((cells, pageIndex) => (
+                <div
+                  key={pageIndex}
+                  className="print-page"
+                  style={{ width: `${printJob.pageWidthMm}mm`, height: `${printJob.pageHeightMm}mm` }}
+                >
+                  {cells.map((cell) => (
+                    <img
+                      key={cell.id}
+                      className={`print-label${printJob.cutLines ? ' cut' : ''}`}
+                      src={cell.src}
+                      alt=""
+                      style={{ left: `${cell.x}mm`, top: `${cell.y}mm`, width: `${cell.w}mm`, height: `${cell.h}mm` }}
+                    />
+                  ))}
+                </div>
+              ))}
             </div>,
             document.body,
           )

@@ -142,6 +142,8 @@ export type KeepItState = {
   replaceScreen: (screen: Screen) => void
   /** Вернуться к экрану (как «←», если он есть в истории), иначе открыть его без карточек вещи в истории */
   returnTo: (screen: Screen) => void
+  /** После удаления вещи — на предыдущий экран (поиск, место…), пропуская экраны этой вещи; иначе — её место */
+  leaveDeletedItem: (itemId: string, placeId: string) => void
   setActiveObject: (objectKey: ObjectKey) => Promise<void>
   setTheme: (theme: ThemeMode) => Promise<void>
   /** Что считать на бейджах мест: количество или позиции */
@@ -377,6 +379,25 @@ export function useKeepIt(): KeepItState {
     setScreenState(target)
   }, [])
 
+  const leaveDeletedItem = useCallback((itemId: string, placeId: string) => {
+    const prev = historyRef.current
+    let end = prev.length
+    while (end > 0) {
+      const entry = prev[end - 1]!
+      if ((entry.name === 'item' || entry.name === 'edit-item') && entry.itemId === itemId) end -= 1
+      else break
+    }
+    if (end > 0) {
+      setHistory(prev.slice(0, end - 1))
+      setCameBack(true)
+      setScreenState(prev[end - 1]!)
+      return
+    }
+    setHistory([])
+    setCameBack(false)
+    setScreenState({ name: 'place', placeId })
+  }, [])
+
   const goBack = useCallback(() => {
     const prev = historyRef.current
     setCameBack(true)
@@ -435,6 +456,7 @@ export function useKeepIt(): KeepItState {
     setScreen: navigate,
     replaceScreen,
     returnTo,
+    leaveDeletedItem,
     setActiveObject: async (objectKey) => {
       await updateSettings({ activeObject: objectKey })
       await refresh()

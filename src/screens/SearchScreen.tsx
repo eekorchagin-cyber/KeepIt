@@ -9,11 +9,20 @@ import type { Item } from '../types'
 type SearchMode = 'name' | 'category'
 
 /** Что искали в последний раз: восстанавливается при возврате из карточки вещи. */
-const lastSearch: { mode: SearchMode; query: string; category: string | null; sub: string } = {
+const lastSearch: { mode: SearchMode; query: string; category: string | null; sub: string; unfilled: boolean } = {
   mode: 'name',
   query: '',
   category: null,
   sub: '',
+  unfilled: false,
+}
+
+/** Чего не хватает в карточке: пустая строка — заполнено */
+function missingInfo(item: Item): string {
+  const parts: string[] = []
+  if (item.needsFill) parts.push('требует заполнения')
+  if (item.needsCategory || !item.category.trim()) parts.push('нет категории')
+  return parts.join(', ')
 }
 
 const NO_CATEGORY = ''
@@ -29,6 +38,7 @@ function ItemRow({ state, item }: { state: KeepItState; item: Item }) {
           <ModeCategory mode={item.mode} category={item.category} subcategory={item.subcategory} />
         </span>
         <span className="muted">{path}</span>
+        {missingInfo(item) ? <span className="search-missing">Не заполнено: {missingInfo(item)}</span> : null}
       </span>
       <span className={`badge${isItemLent(item) ? ' warn' : ''}`}>
         {item.needsFill ? 'заполнить' : isItemLent(item) ? `у ${item.lentTo}` : formatQty(item.quantity, item.unit)}
@@ -127,12 +137,33 @@ export function SearchScreen({ state }: { state: KeepItState }) {
 }
 
 function NameResults({ state, items, q }: { state: KeepItState; items: Item[]; q: string }) {
-  const results = q ? items.filter((item) => normalizeSearch(item.name).includes(q)) : items
+  const [onlyUnfilled, setOnlyUnfilledState] = useState(lastSearch.unfilled)
+  function setOnlyUnfilled(next: boolean) {
+    lastSearch.unfilled = next
+    setOnlyUnfilledState(next)
+  }
+  const unfilled = items.filter((item) => missingInfo(item))
+  const source = onlyUnfilled ? unfilled : items
+  const results = q ? source.filter((item) => normalizeSearch(item.name).includes(q)) : source
   return (
     <div className="panel stack">
-      <span className="muted">{q ? `Найдено: ${results.length}` : `Все вещи: ${results.length}`}</span>
+      <div className="chip-row">
+        <button
+          type="button"
+          className={`suggest-chip${onlyUnfilled ? '' : ' neutral'}`}
+          aria-pressed={onlyUnfilled}
+          onClick={() => setOnlyUnfilled(!onlyUnfilled)}
+        >
+          Только незаполненные · {unfilled.length}
+        </button>
+      </div>
+      <span className="muted">
+        {q ? `Найдено: ${results.length}` : onlyUnfilled ? `Незаполненные: ${results.length}` : `Все вещи: ${results.length}`}
+      </span>
       <div className="list">
-        {results.length === 0 ? <p className="muted">Ничего не найдено в активном объекте</p> : null}
+        {results.length === 0 ? (
+          <p className="muted">{onlyUnfilled && !q ? 'Все карточки заполнены' : 'Ничего не найдено в активном объекте'}</p>
+        ) : null}
         {results.map((item) => (
           <ItemRow key={item.id} state={state} item={item} />
         ))}

@@ -172,6 +172,12 @@ label.field {
   font-size: 0.85em;
 }
 
+/* Подпись над группой кнопок — как у полей */
+.field-caption {
+  color: var(--muted);
+  font-size: 0.85em;
+}
+
 .app-shell {
   width: min(720px, 100%);
   margin: 0 auto;
@@ -195,7 +201,9 @@ label.field {
   align-content: start;
 }
 
-.home-screen {
+.stack.home-screen {
+  display: flex;
+  flex-direction: column;
   gap: 16px;
 }
 
@@ -229,6 +237,7 @@ label.field {
 .section-grid {
   display: grid;
   grid-template-columns: 1fr;
+  align-content: start;
   gap: 12px;
   flex: 1;
 }
@@ -938,6 +947,15 @@ html[data-theme='dark'] .badge.warn {
 }
 
 /* Путь места — своей строкой во всю ширину, значки действий — строкой ниже */
+.search-missing {
+  font-size: 0.85em;
+  color: #9a6700;
+}
+
+html[data-theme='dark'] .search-missing {
+  color: #f0c674;
+}
+
 .duplicates-result {
   margin: 0;
   padding: 8px 12px;
@@ -1213,72 +1231,28 @@ html[data-theme='dark'] .badge.warn {
     font-family: system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
   }
 
-  /* Лист A4 (HP LaserJet Pro MFP M426dw): 3 метки в ряд */
-  .print-root.print-a4 {
-    display: grid !important;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 6mm;
-  }
-
-  .print-a4 .label-card {
-    border: 1px dashed #999;
-    padding: 3mm;
-    break-inside: avoid;
-    text-align: center;
-  }
-
-  .print-a4 .label-card img {
-    width: 32mm;
-    height: 32mm;
-  }
-
-  .print-a4 .label-name {
-    font-size: 12pt;
-    font-weight: 700;
-    line-height: 1.2;
-    margin-top: 1.5mm;
-    hyphens: auto;
-    overflow-wrap: break-word;
-  }
-
-  /* Лента 62 мм (Brother QL-810W / QL-820NWB): одна метка на этикетку 62×40 мм */
-  .print-tape62 .tape-label {
-    width: 58mm;
-    height: 36mm;
-    display: grid;
-    grid-template-columns: 30mm 1fr;
-    gap: 2mm;
-    align-items: center;
+  /* Страница листа или ленты: метки-картинки ставятся по миллиметрам — так же, как в PDF */
+  .print-page {
+    position: relative;
     overflow: hidden;
     break-after: page;
     page-break-after: always;
   }
 
-  .print-tape62 .tape-label:last-child {
+  .print-page:last-child {
     break-after: auto;
     page-break-after: auto;
   }
 
-  .print-tape62 .tape-label img {
-    width: 30mm;
-    height: 30mm;
+  .print-label {
+    position: absolute;
+    display: block;
+    box-sizing: border-box;
   }
 
-  .print-tape62 .tape-name {
-    font-size: 13pt;
-    font-weight: 700;
-    line-height: 1.15;
-    hyphens: auto;
-    overflow-wrap: break-word;
-  }
-
-  .print-tape62 .tape-path,
-  .print-a4 .label-path {
-    margin-top: 1mm;
-    font-size: 7.5pt;
-    font-weight: 500;
-    line-height: 1.2;
-    overflow-wrap: break-word;
+  /* Обычная бумага — пунктир для разрезания */
+  .print-label.cut {
+    outline: 0.2mm dashed #999;
   }
 }
 
@@ -1443,6 +1417,14 @@ html[data-theme='dark'] .badge.service-soon {
 .update-banner p {
   margin: 0;
   line-height: 1.35;
+}
+
+/* Номер и дата версии внизу главного экрана */
+.app-version {
+  margin: auto 0 0;
+  padding-top: 8px;
+  text-align: center;
+  font-size: 0.8em;
 }
 
 .about-hero {

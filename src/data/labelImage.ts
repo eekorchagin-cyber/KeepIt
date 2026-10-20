@@ -1,5 +1,6 @@
 import QRCode from 'qrcode'
 import type { LabelSize } from './printers'
+import type { TextPlacement } from './labelSheets'
 
 const FONT = "700 {size}px system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif"
 
@@ -40,14 +41,76 @@ function pathFontAt(size: number): string {
 }
 
 /**
- * Картинка этикетки точно под размер ленты: слева QR-код, справа название места и ниже мельче — путь к нему.
- * QR рисуется по модулям без сглаживания — чёткая печать на термопринтере.
+ * Название и (мельче) путь в прямоугольнике: шрифт подбирается, чтобы всё поместилось и слова не рвались.
+ * align: 'left' — текст справа от QR, 'center' — под QR.
  */
-function drawLabel(name: string, url: string, size: LabelSize, dotsPerMm: number, path = ''): HTMLCanvasElement {
+function drawTextBlock(
+  ctx: CanvasRenderingContext2D,
+  box: { x: number; y: number; width: number; height: number },
+  name: string,
+  path: string,
+  dotsPerMm: number,
+  align: 'left' | 'center',
+) {
+  const { width: textWidth, height: textHeight } = box
+  const minFont = Math.min(2 * dotsPerMm, textHeight / 2)
+  let fontSize = Math.max(minFont, Math.min(5 * dotsPerMm, textHeight / 2))
+  const pathFontFor = (nameFont: number) =>
+    Math.max(Math.min(2 * dotsPerMm, minFont), Math.min(3 * dotsPerMm, nameFont * 0.62))
+  const pathGap = path ? Math.round(0.8 * dotsPerMm) : 0
+  let lines: string[] = []
+  let pathLines: string[] = []
+  const words = name.split(/\s+/).filter(Boolean)
+  while (fontSize >= minFont) {
+    ctx.font = fontAt(fontSize)
+    lines = wrapText(ctx, name, textWidth)
+    // Слова не рвём, пока можно уменьшить шрифт
+    const wordsFit = words.every((word) => ctx.measureText(word).width <= textWidth)
+    const pathFont = pathFontFor(fontSize)
+    ctx.font = pathFontAt(pathFont)
+    pathLines = path ? wrapText(ctx, path, textWidth).slice(0, align === 'center' ? 2 : 3) : []
+    const blockHeight = lines.length * fontSize * 1.15 + pathGap + pathLines.length * pathFont * 1.2
+    const fits = blockHeight <= textHeight && lines.length <= 4
+    if (fits && (wordsFit || fontSize - 0.5 * dotsPerMm < minFont)) break
+    fontSize -= 0.5 * dotsPerMm
+  }
+  fontSize = Math.max(fontSize, minFont)
+  ctx.textBaseline = 'top'
+  ctx.textAlign = align
+  const textX = align === 'center' ? box.x + textWidth / 2 : box.x
+  const lineHeight = fontSize * 1.15
+  const pathFont = pathFontFor(fontSize)
+  const pathLineHeight = pathFont * 1.2
+  const shown = lines.slice(0, Math.max(1, Math.floor(textHeight / lineHeight)))
+  // Путь — только если остаётся место: название важнее
+  const pathRoom = Math.floor((textHeight - shown.length * lineHeight - pathGap) / pathLineHeight)
+  const pathShown = pathRoom > 0 ? pathLines.slice(0, pathRoom) : []
+  const blockHeight = shown.length * lineHeight + (pathShown.length ? pathGap + pathShown.length * pathLineHeight : 0)
+  const blockTop = Math.round(box.y + (textHeight - Math.min(blockHeight, textHeight)) / 2)
+  ctx.font = fontAt(fontSize)
+  shown.forEach((text, index) => ctx.fillText(text, textX, blockTop + index * lineHeight))
+  ctx.font = pathFontAt(pathFont)
+  const pathTop = blockTop + shown.length * lineHeight + pathGap
+  pathShown.forEach((text, index) => ctx.fillText(text, textX, pathTop + index * pathLineHeight))
+  ctx.textAlign = 'left'
+}
+
+/**
+ * Картинка этикетки точно под её размер: QR-код и название места, мельче — путь к нему.
+ * Текст справа от QR или под ним. QR рисуется по модулям без сглаживания — чёткая печать.
+ */
+function drawLabel(
+  name: string,
+  url: string,
+  size: LabelSize,
+  dotsPerMm: number,
+  path = '',
+  placement: TextPlacement = 'right',
+): HTMLCanvasElement {
   const width = Math.round(size.widthMm * dotsPerMm)
   const height = Math.round(size.heightMm * dotsPerMm)
   const margin = Math.round(1.5 * dotsPerMm)
-  const gap = Math.round(1.5 * dotsPerMm)
+  const gap = Math.round((placement === 'below' ? 0.8 : 1.5) * dotsPerMm)
 
   const canvas = document.createElement('canvas')
   canvas.width = width
@@ -61,11 +124,14 @@ function drawLabel(name: string, url: string, size: LabelSize, dotsPerMm: number
   const qr = QRCode.create(url, { errorCorrectionLevel: 'M' })
   const modules = qr.modules
   const quiet = 1
-  const maxSide = Math.min(height - margin * 2, Math.round(width * 0.5))
+  const maxSide =
+    placement === 'below'
+      ? Math.min(width - margin * 2, Math.round((height - margin * 2) * 0.62))
+      : Math.min(height - margin * 2, Math.round(width * 0.5))
   const cell = Math.max(1, Math.floor(maxSide / (modules.size + quiet * 2)))
   const qrSide = cell * (modules.size + quiet * 2)
-  const qrX = margin
-  const qrY = Math.round((height - qrSide) / 2)
+  const qrX = placement === 'below' ? Math.round((width - qrSide) / 2) : margin
+  const qrY = placement === 'below' ? margin : Math.round((height - qrSide) / 2)
   ctx.fillStyle = '#000'
   for (let row = 0; row < modules.size; row += 1) {
     for (let col = 0; col < modules.size; col += 1) {
@@ -75,44 +141,27 @@ function drawLabel(name: string, url: string, size: LabelSize, dotsPerMm: number
     }
   }
 
-  const textX = qrX + qrSide + gap
-  const textWidth = width - textX - margin
-  const textHeight = height - margin * 2
-  let fontSize = Math.min(5 * dotsPerMm, textHeight / 2)
-  const minFont = 2 * dotsPerMm
-  const pathFontFor = (nameFont: number) => Math.max(2 * dotsPerMm, Math.min(3 * dotsPerMm, nameFont * 0.62))
-  const pathGap = path ? Math.round(1 * dotsPerMm) : 0
-  let lines: string[] = []
-  let pathLines: string[] = []
-  const words = name.split(/\s+/).filter(Boolean)
-  while (fontSize >= minFont) {
-    ctx.font = fontAt(fontSize)
-    lines = wrapText(ctx, name, textWidth)
-    // Слова не рвём, пока можно уменьшить шрифт
-    const wordsFit = words.every((word) => ctx.measureText(word).width <= textWidth)
-    const pathFont = pathFontFor(fontSize)
-    ctx.font = pathFontAt(pathFont)
-    pathLines = path ? wrapText(ctx, path, textWidth).slice(0, 3) : []
-    const blockHeight = lines.length * fontSize * 1.15 + pathGap + pathLines.length * pathFont * 1.2
-    const fits = blockHeight <= textHeight && lines.length <= 4
-    if (fits && (wordsFit || fontSize - 0.5 * dotsPerMm < minFont)) break
-    fontSize -= 0.5 * dotsPerMm
+  if (placement === 'below') {
+    const top = qrY + qrSide + gap
+    drawTextBlock(
+      ctx,
+      { x: margin, y: top, width: width - margin * 2, height: height - margin - top },
+      name,
+      path,
+      dotsPerMm,
+      'center',
+    )
+  } else {
+    const textX = qrX + qrSide + gap
+    drawTextBlock(
+      ctx,
+      { x: textX, y: margin, width: width - textX - margin, height: height - margin * 2 },
+      name,
+      path,
+      dotsPerMm,
+      'left',
+    )
   }
-  ctx.textBaseline = 'top'
-  const lineHeight = fontSize * 1.15
-  const pathFont = pathFontFor(fontSize)
-  const pathLineHeight = pathFont * 1.2
-  const shown = lines.slice(0, Math.max(1, Math.floor(textHeight / lineHeight)))
-  const blockHeight = shown.length * lineHeight + (pathLines.length ? pathGap + pathLines.length * pathLineHeight : 0)
-  const blockTop = Math.round((height - Math.min(blockHeight, textHeight)) / 2)
-  ctx.font = fontAt(fontSize)
-  shown.forEach((text, index) => ctx.fillText(text, textX, blockTop + index * lineHeight))
-  ctx.font = pathFontAt(pathFont)
-  const pathTop = blockTop + shown.length * lineHeight + pathGap
-  pathLines.forEach((text, index) => {
-    const y = pathTop + index * pathLineHeight
-    if (y + pathFont <= height - margin) ctx.fillText(text, textX, y)
-  })
   return canvas
 }
 
@@ -128,8 +177,21 @@ export function renderLabelPng(
   size: LabelSize,
   dotsPerMm: number,
   path = '',
+  placement: TextPlacement = 'right',
 ): Promise<Blob> {
-  return canvasBlob(drawLabel(name, url, size, dotsPerMm, path), 'image/png')
+  return canvasBlob(drawLabel(name, url, size, dotsPerMm, path, placement), 'image/png')
+}
+
+/** Метка картинкой для печати через системное окно — та же, что в PDF */
+export function renderLabelDataUrl(
+  name: string,
+  url: string,
+  size: LabelSize,
+  dotsPerMm: number,
+  path = '',
+  placement: TextPlacement = 'right',
+): string {
+  return drawLabel(name, url, size, dotsPerMm, path, placement).toDataURL('image/png')
 }
 
 /** Метка в JPEG — для вставки в PDF (формат, который PDF принимает без перекодирования). */
@@ -139,8 +201,9 @@ export async function renderLabelJpeg(
   size: LabelSize,
   dotsPerMm: number,
   path = '',
+  placement: TextPlacement = 'right',
 ): Promise<{ bytes: Uint8Array; width: number; height: number }> {
-  const canvas = drawLabel(name, url, size, dotsPerMm, path)
+  const canvas = drawLabel(name, url, size, dotsPerMm, path, placement)
   const blob = await canvasBlob(canvas, 'image/jpeg', 0.95)
   return { bytes: new Uint8Array(await blob.arrayBuffer()), width: canvas.width, height: canvas.height }
 }

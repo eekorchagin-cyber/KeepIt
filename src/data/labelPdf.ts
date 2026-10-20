@@ -1,13 +1,11 @@
 import { renderLabelJpeg } from './labelImage'
+import { A4, TAPE_LABEL, sheetPages, type SheetLayout, type TextPlacement } from './labelSheets'
 import type { PrinterMethod } from './printers'
 
 const PT_PER_MM = 72 / 25.4
-/** ≈300 dpi — чёткий QR и текст при печати из PDF */
-const DOTS_PER_MM = 12
-
-const TAPE = { widthMm: 62, heightMm: 40 }
-const A4 = { widthMm: 210, heightMm: 297, marginMm: 10, gapMm: 5, columns: 3, rows: 6 }
-const A4_LABEL = { widthMm: (210 - 2 * 10 - 2 * 5) / 3, heightMm: 40 }
+/** ≈300 dpi — чёткий QR и текст при печати (и в PDF, и через системное окно) */
+export const LABEL_DOTS_PER_MM = 12
+const DOTS_PER_MM = LABEL_DOTS_PER_MM
 
 type JpegImage = { bytes: Uint8Array; width: number; height: number }
 /** Положение метки на странице, мм от левого верхнего угла */
@@ -86,46 +84,36 @@ function buildPdf(images: JpegImage[], pages: Page[]): Blob {
 }
 
 /**
- * PDF с метками в раскладке выбранного AirPrint-принтера:
- * лента — каждая метка на своей странице 62×40 мм, A4 — по 3 в ряд с пунктиром для разрезания.
+ * PDF с метками в той же раскладке, что и печать через системное окно:
+ * лента — каждая метка на своей странице 62×40 мм, A4 — по выбранному листу этикеток.
  */
 export async function renderLabelsPdf(
   labels: Array<{ name: string; url: string; path?: string }>,
   method: Exclude<PrinterMethod, 'image'>,
+  options: { sheet: SheetLayout; placement: TextPlacement },
 ): Promise<Blob> {
-  const labelSize = method === 'airprint-tape' ? TAPE : A4_LABEL
+  const labelSize = method === 'airprint-tape' ? TAPE_LABEL : options.sheet
   const images = await Promise.all(
-    labels.map((label) => renderLabelJpeg(label.name, label.url, labelSize, DOTS_PER_MM, label.path)),
+    labels.map((label) =>
+      renderLabelJpeg(label.name, label.url, labelSize, DOTS_PER_MM, label.path, options.placement),
+    ),
   )
 
   if (method === 'airprint-tape') {
     return buildPdf(
       images,
       images.map((_, index) => ({
-        ...TAPE,
-        items: [{ image: index, x: 0, y: 0, w: TAPE.widthMm, h: TAPE.heightMm }],
+        ...TAPE_LABEL,
+        items: [{ image: index, x: 0, y: 0, w: TAPE_LABEL.widthMm, h: TAPE_LABEL.heightMm }],
         cutLines: false,
       })),
     )
   }
 
-  const perPage = A4.columns * A4.rows
-  const pages: Page[] = []
-  for (let start = 0; start < images.length; start += perPage) {
-    const items: Placement[] = []
-    for (let index = start; index < Math.min(images.length, start + perPage); index += 1) {
-      const cell = index - start
-      const column = cell % A4.columns
-      const row = Math.floor(cell / A4.columns)
-      items.push({
-        image: index,
-        x: A4.marginMm + column * (A4_LABEL.widthMm + A4.gapMm),
-        y: A4.marginMm + row * (A4_LABEL.heightMm + A4.gapMm),
-        w: A4_LABEL.widthMm,
-        h: A4_LABEL.heightMm,
-      })
-    }
-    pages.push({ widthMm: A4.widthMm, heightMm: A4.heightMm, items, cutLines: true })
-  }
+  const pages: Page[] = sheetPages(options.sheet, images.length).map((cells) => ({
+    ...A4,
+    items: cells.map((cell) => ({ image: cell.index, x: cell.x, y: cell.y, w: cell.w, h: cell.h })),
+    cutLines: options.sheet.cutLines,
+  }))
   return buildPdf(images, pages)
 }
