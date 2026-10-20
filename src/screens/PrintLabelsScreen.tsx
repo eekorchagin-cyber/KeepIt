@@ -44,6 +44,14 @@ type OutputTarget = 'print' | 'pdf'
 type LabelView = Place & { qrDataUrl: string }
 type LabelImage = { id: string; name: string; blob: Blob; previewUrl: string }
 
+/**
+ * iPhone / iPad: программа на экране «Домой» не открывает окно печати из веб-приложения,
+ * поэтому там печатаем через PDF → «Поделиться» → «Напечатать» (то же окно AirPrint).
+ */
+const PRINT_VIA_SHARE =
+  typeof navigator !== 'undefined' &&
+  (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
+
 function readStored(key: string): string | null {
   try {
     return localStorage.getItem(key)
@@ -127,7 +135,8 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   /** Готовый PDF и набор меток (с принтером), для которого он собран */
-  const [pdfResult, setPdf] = useState<{ file: File; key: string } | null>(null)
+  /** purpose: print — PDF для печати через «Поделиться» (iPhone), save — сохранить файл */
+  const [pdfResult, setPdf] = useState<{ file: File; key: string; purpose: 'print' | 'save' } | null>(null)
   const [askFree, setAskFree] = useState<OutputTarget | null>(null)
   const [freeCount, setFreeCount] = useState(12)
   /** Свободные метки, созданные перед печатью — печатаются вместе с выбранными местами */
@@ -136,6 +145,8 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
   const printer = findPrinter(printerId)
   const size: LabelSize = printer.sizes[sizeIndex] ?? printer.sizes[0]!
   const isAirPrint = printer.method !== 'image'
+  /** Печать через системное окно браузера (компьютер); на iPhone — через PDF и «Поделиться» */
+  const directPrint = isAirPrint && !PRINT_VIA_SHARE
   const sheet = findSheet(sheetId)
 
   const objectKey = start?.objectKey
@@ -202,6 +213,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
       .join(',')}`
   }
   const pdf = pdfResult && pdfResult.key === labelSetKey(printList) ? pdfResult.file : null
+  const pdfPurpose = pdfResult?.purpose ?? 'save'
 
   useEffect(() => {
     let cancelled = false
@@ -278,7 +290,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
 
   // Заранее готовим страницы печати, чтобы по нажатию «Печать» сразу открыть окно (требование iPhone)
   const [printJob, setPrintJob] = useState<PrintJob | null>(null)
-  const printSetKey = isAirPrint ? labelSetKey(printList) : ''
+  const printSetKey = directPrint ? labelSetKey(printList) : ''
   useEffect(() => {
     if (!printSetKey || printList.length === 0) return
     let cancelled = false
@@ -303,7 +315,8 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     setBusy(true)
     setError(null)
     try {
-      if (isAirPrint && target === 'pdf') {
+      if (isAirPrint && (target === 'pdf' || !directPrint)) {
+        const purpose = target === 'print' ? 'print' : 'save'
         const blob = await renderLabelsPdf(
           list.map((place) => ({ name: place.name, url: placeUrl(place.id), path: parentPath(place.id) })),
           printer.method === 'airprint-tape' ? 'airprint-tape' : 'airprint-a4',
@@ -313,8 +326,13 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
         setPdf({
           file: new File([blob], `Метки KeepIt — ${title}.pdf`, { type: 'application/pdf' }),
           key: labelSetKey(list),
+          purpose,
         })
-        setMessage(`PDF готов: меток ${list.length}. Нажмите «Сохранить PDF».`)
+        setMessage(
+          purpose === 'print'
+            ? `Метки готовы: ${list.length}. Нажмите «Напечатать» и в меню выберите «Напечатать».`
+            : `PDF готов: меток ${list.length}. Нажмите «Сохранить PDF».`,
+        )
         return
       }
       const prepared = await Promise.all(
@@ -396,7 +414,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
       setAskFree(target)
       return
     }
-    if (target === 'print' && isAirPrint) printNow()
+    if (target === 'print' && directPrint) printNow()
     else void output(printList, target)
   }
 
@@ -405,7 +423,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     setAskFree(null)
     setFreeDecided(true)
     if (!create || !freeParent) {
-      if (target === 'print' && isAirPrint) printNow()
+      if (target === 'print' && directPrint) printNow()
       else void output(printList, target)
       return
     }
@@ -416,7 +434,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
       setExtraPlaces((current) => [...current, ...created])
       const seen = new Set(printList.map((place) => place.id))
       const full = [...printList, ...created.filter((place) => !seen.has(place.id))]
-      if (target === 'print' && isAirPrint) {
+      if (target === 'print' && directPrint) {
         // Создание меток заняло время — окно печати откроется по следующему нажатию
         setMessage(`Свободные метки созданы (${created.length}). Нажмите «Печать» ещё раз.`)
         setBusy(false)
@@ -449,9 +467,13 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     try {
       const result = await shareFiles([pdf])
       setMessage(
-        result === 'shared'
-          ? 'PDF передан. Чтобы сохранить его, выберите «Сохранить в Файлы».'
-          : 'PDF скачан в «Загрузки».',
+        pdfPurpose === 'print'
+          ? result === 'shared'
+            ? 'Если окно печати не открылось — снова нажмите «Напечатать» и выберите «Напечатать» в меню.'
+            : 'PDF скачан — откройте его и напечатайте.'
+          : result === 'shared'
+            ? 'PDF передан. Чтобы сохранить его, выберите «Сохранить в Файлы».'
+            : 'PDF скачан в «Загрузки».',
       )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось сохранить PDF')
@@ -461,11 +483,13 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
   /** Страницы печати подготовлены для текущего набора — можно сразу открывать окно печати */
   const printReady = Boolean(printJob && printJob.key === printSetKey)
   const mainLabel =
-    busy || (isAirPrint && printList.length > 0 && !printReady)
+    busy || (directPrint && printList.length > 0 && !printReady)
       ? 'Готовлю метки…'
-      : isAirPrint
+      : directPrint
         ? `Печать (${printList.length})`
-        : `Подготовить метки-картинки (${printList.length})`
+        : isAirPrint
+          ? `Подготовить к печати (${printList.length})`
+          : `Подготовить метки-картинки (${printList.length})`
 
   return (
     <div className="stack">
@@ -579,7 +603,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
         <button
           type="button"
           onClick={() => onMainClick('print')}
-          disabled={printList.length === 0 || busy || (isAirPrint && !printReady)}
+          disabled={printList.length === 0 || busy || (directPrint && !printReady)}
         >
           {mainLabel}
         </button>
@@ -595,8 +619,14 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
         ) : null}
         {pdf ? (
           <button type="button" onClick={() => void savePdf()}>
-            Сохранить PDF
+            {pdfPurpose === 'print' ? 'Напечатать' : 'Сохранить PDF'}
           </button>
+        ) : null}
+        {isAirPrint && !directPrint ? (
+          <p className="muted">
+            На iPhone печать идёт через меню «Поделиться»: «Подготовить к печати» → «Напечатать» → в меню
+            «Напечатать» — откроется окно AirPrint с выбором принтера.
+          </p>
         ) : null}
         {images.length > 0 ? (
           <button type="button" onClick={() => void saveImages()}>
@@ -657,7 +687,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
         </div>
       ) : null}
 
-      {isAirPrint && printJob && printReady
+      {directPrint && printJob && printReady
         ? createPortal(
             <div className="print-root" aria-hidden>
               <style>{`@media print { @page { size: ${printJob.pageWidthMm}mm ${printJob.pageHeightMm}mm; margin: 0; } }`}</style>
