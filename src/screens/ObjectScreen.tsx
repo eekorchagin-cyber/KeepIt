@@ -3,12 +3,21 @@ import { objectLabelFromPlaces } from '../data/icons'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { PlaceTools } from '../components/PlaceTools'
 import { BadgeCountToggle } from '../components/BadgeCountToggle'
+import { FreeLabelsGroup } from '../components/FreeLabelsGroup'
+import { isUnusedFreeLabel } from '../data/repository'
 import type { ObjectKey } from '../types'
 
 export function ObjectScreen({ state, objectKey }: { state: KeepItState; objectKey: ObjectKey }) {
   const root = state.places.find((place) => place.type === 'object' && place.objectKey === objectKey)
   const label = objectLabelFromPlaces(objectKey, state.places)
-  const rooms = root ? state.childPlaces(root.id) : []
+  const children = root ? state.childPlaces(root.id) : []
+  const isUnusedFree = (place: (typeof children)[number]) => {
+    if (!isUnusedFreeLabel(place)) return false
+    const contents = state.contentsOf(place.id)
+    return contents.places + contents.items === 0
+  }
+  const freeLabels = children.filter(isUnusedFree)
+  const rooms = children.filter((place) => !isUnusedFree(place))
 
   return (
     <div className="stack screen-fill">
@@ -52,6 +61,7 @@ export function ObjectScreen({ state, objectKey }: { state: KeepItState; objectK
             </button>
           ))}
         </div>
+        <FreeLabelsGroup state={state} places={freeLabels} />
       </div>
     </div>
   )

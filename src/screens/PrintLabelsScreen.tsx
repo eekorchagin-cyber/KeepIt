@@ -391,7 +391,14 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
 
   /** Куда класть свободные метки: выбранное помещение или помещение выбранного места. */
   const freeParent = state.findPlace(mode === 'room' ? roomId : roomOf(singleId))
-  const canCreateFree = Boolean(freeParent && canHoldFreeLabels(freeParent.type))
+  // Не во весь объект: иначе заготовки встают в один ряд с помещениями
+  const canCreateFree = Boolean(freeParent && freeParent.type !== 'object' && canHoldFreeLabels(freeParent.type))
+  const freeParentPath = freeParent
+    ? state
+        .pathFor(freeParent.id)
+        .map((part) => part.name)
+        .join(' / ')
+    : ''
 
   /**
    * Системное окно печати. На iPhone Safari открывает его, только если печать вызвана прямо в нажатии,
@@ -663,9 +670,9 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
             </div>
             <div className="stack">
               <p className="muted">
-                Свободные метки — заготовки для будущих коробок. В «{freeParent.name}» появятся пустые места
-                «Свободная метка», их метки напечатаются вместе с выбранными. Название задаётся при первом
-                сканировании.
+                Свободные метки — заготовки для будущих коробок. Пустые места «Свободная метка» появятся в
+                «{freeParentPath}» (одной строкой «Свободные метки» в списке), их метки напечатаются вместе с
+                выбранными. Название задаётся при первом сканировании.
               </p>
               <label className="field">
                 Сколько свободных меток

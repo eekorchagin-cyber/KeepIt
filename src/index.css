@@ -966,6 +966,14 @@ html[data-theme='dark'] .search-missing {
   font-weight: 600;
 }
 
+.free-labels-row {
+  border-style: dashed;
+}
+
+.free-labels-list {
+  padding-left: 12px;
+}
+
 .badge-toggle {
   display: flex;
   justify-content: flex-end;

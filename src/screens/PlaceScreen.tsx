@@ -6,6 +6,7 @@ import { PlaceTools } from '../components/PlaceTools'
 import { isItemLent, isUnusedFreeLabel } from '../data/repository'
 import { formatQty } from '../data/units'
 import { BadgeCountToggle } from '../components/BadgeCountToggle'
+import { FreeLabelsGroup } from '../components/FreeLabelsGroup'
 import type { Place } from '../types'
 
 function NestedPlaces({ state, places }: { state: KeepItState; places: Place[] }) {
@@ -88,7 +89,7 @@ function NestedPlaces({ state, places }: { state: KeepItState; places: Place[] }
       ) : null}
 
       <div className="list">
-        {places.map((child) =>
+        {(selecting ? places : places.filter((place) => !unusedFree.includes(place))).map((child) =>
           selecting ? (
             <label key={child.id} className="check-row">
               <input type="checkbox" checked={selected.has(child.id)} onChange={() => toggle(child.id)} />
@@ -113,6 +114,7 @@ function NestedPlaces({ state, places }: { state: KeepItState; places: Place[] }
           ),
         )}
       </div>
+      {!selecting ? <FreeLabelsGroup state={state} places={unusedFree} /> : null}
 
       {selecting ? (
         <div className="stack sticky-actions panel">
