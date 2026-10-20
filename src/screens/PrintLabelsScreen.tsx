@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { createPortal, flushSync } from 'react-dom'
+import { createPortal } from 'react-dom'
 import QRCode from 'qrcode'
 import { PlaceStepPicker } from '../components/PlaceStepPicker'
 import { ChoiceSelect } from '../components/ChoiceSelect'
@@ -29,6 +29,8 @@ const PLACEMENT_KEY = 'keepit-label-text'
 
 /** Готовые к печати страницы: картинки меток с положением в мм — та же раскладка, что в PDF */
 type PrintJob = {
+  /** Для какого набора (принтер, лист, текст, места) подготовлено */
+  key: string
   pageWidthMm: number
   pageHeightMm: number
   cutLines: boolean
@@ -41,18 +43,6 @@ type OutputTarget = 'print' | 'pdf'
 
 type LabelView = Place & { qrDataUrl: string }
 type LabelImage = { id: string; name: string; blob: Blob; previewUrl: string }
-
-/** Дождаться загрузки картинок слоя печати (не дольше секунды), чтобы на листе не было пустых мест */
-function waitForImages(images: NodeListOf<HTMLImageElement>): Promise<void> {
-  const pending = [...images].filter((image) => !image.complete)
-  if (pending.length === 0) return Promise.resolve()
-  return Promise.race([
-    Promise.all(
-      pending.map((image) => new Promise<void>((resolve) => image.addEventListener('load', () => resolve(), { once: true }))),
-    ).then(() => undefined),
-    new Promise<void>((resolve) => window.setTimeout(resolve, 1000)),
-  ])
-}
 
 function readStored(key: string): string | null {
   try {
@@ -129,7 +119,8 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
   const [placement, setPlacement] = useState<TextPlacement>(() =>
     readStored(PLACEMENT_KEY) === 'below' ? 'below' : 'right',
   )
-  const [printJob, setPrintJob] = useState<PrintJob | null>(null)
+  /** Ответ на вопрос о свободных метках уже дан — больше не спрашиваем в этой печати */
+  const [freeDecided, setFreeDecided] = useState(false)
   const [labels, setLabels] = useState<LabelView[]>([])
   const [images, setImages] = useState<LabelImage[]>([])
   const [busy, setBusy] = useState(false)
@@ -239,51 +230,70 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     }
   }, [images])
 
-  /** Страницы для системного окна печати — те же картинки и та же раскладка, что в PDF */
-  function buildPrintJob(list: Place[]): PrintJob {
-    if (printer.method === 'airprint-tape') {
+  /**
+   * Страницы для системного окна печати — те же картинки и та же раскладка, что в PDF.
+   * Картинки рисуются порциями с паузами, чтобы экран не подвисал на больших наборах.
+   */
+  async function buildPrintJob(list: Place[], isCancelled: () => boolean): Promise<PrintJob | null> {
+    const tape = printer.method === 'airprint-tape'
+    const size = tape ? TAPE_LABEL : sheet
+    const sources: string[] = []
+    for (let index = 0; index < list.length; index += 1) {
+      if (index > 0 && index % 8 === 0) {
+        await new Promise((resolve) => window.setTimeout(resolve, 0))
+        if (isCancelled()) return null
+      }
+      const place = list[index]!
+      sources.push(renderLabelDataUrl(place.name, placeUrl(place.id), size, LABEL_DOTS_PER_MM, parentPath(place.id), placement))
+    }
+    const key = labelSetKey(list)
+    if (tape) {
       return {
+        key,
         pageWidthMm: TAPE_LABEL.widthMm,
         pageHeightMm: TAPE_LABEL.heightMm,
         cutLines: false,
-        pages: list.map((place) => [
-          {
-            id: place.id,
-            src: renderLabelDataUrl(
-              place.name,
-              placeUrl(place.id),
-              TAPE_LABEL,
-              LABEL_DOTS_PER_MM,
-              parentPath(place.id),
-              placement,
-            ),
-            x: 0,
-            y: 0,
-            w: TAPE_LABEL.widthMm,
-            h: TAPE_LABEL.heightMm,
-          },
+        pages: list.map((place, index) => [
+          { id: place.id, src: sources[index]!, x: 0, y: 0, w: TAPE_LABEL.widthMm, h: TAPE_LABEL.heightMm },
         ]),
       }
     }
     return {
+      key,
       pageWidthMm: A4.widthMm,
       pageHeightMm: A4.heightMm,
       cutLines: sheet.cutLines,
       pages: sheetPages(sheet, list.length).map((cells) =>
-        cells.map((cell) => {
-          const place = list[cell.index]!
-          return {
-            id: place.id,
-            src: renderLabelDataUrl(place.name, placeUrl(place.id), sheet, LABEL_DOTS_PER_MM, parentPath(place.id), placement),
-            x: cell.x,
-            y: cell.y,
-            w: cell.w,
-            h: cell.h,
-          }
-        }),
+        cells.map((cell) => ({
+          id: list[cell.index]!.id,
+          src: sources[cell.index]!,
+          x: cell.x,
+          y: cell.y,
+          w: cell.w,
+          h: cell.h,
+        })),
       ),
     }
   }
+
+  // Заранее готовим страницы печати, чтобы по нажатию «Печать» сразу открыть окно (требование iPhone)
+  const [printJob, setPrintJob] = useState<PrintJob | null>(null)
+  const printSetKey = isAirPrint ? labelSetKey(printList) : ''
+  useEffect(() => {
+    if (!printSetKey || printList.length === 0) return
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      void buildPrintJob(printList, () => cancelled).then((job) => {
+        if (!cancelled && job) setPrintJob(job)
+      })
+    }, 120)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+    // Ключ набора уже учитывает принтер, лист, текст и состав меток
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [printSetKey, state.places])
 
   /**
    * AirPrint — системное окно печати или PDF: одни и те же картинки меток в одной раскладке;
@@ -305,13 +315,6 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
           key: labelSetKey(list),
         })
         setMessage(`PDF готов: меток ${list.length}. Нажмите «Сохранить PDF».`)
-        return
-      }
-      if (isAirPrint) {
-        const job = buildPrintJob(list)
-        flushSync(() => setPrintJob(job))
-        await waitForImages(document.querySelectorAll<HTMLImageElement>('.print-root img'))
-        window.print()
         return
       }
       const prepared = await Promise.all(
@@ -372,20 +375,38 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
   const freeParent = state.findPlace(mode === 'room' ? roomId : roomOf(singleId))
   const canCreateFree = Boolean(freeParent && canHoldFreeLabels(freeParent.type))
 
+  /**
+   * Системное окно печати. На iPhone Safari открывает его, только если печать вызвана прямо в нажатии,
+   * без ожидания, — поэтому страницы печати готовятся заранее (printJob), а здесь только window.print().
+   */
+  function printNow() {
+    if (!printJob || printJob.key !== printSetKey) {
+      setError('Метки ещё готовятся — нажмите «Печать» через секунду.')
+      return
+    }
+    window.print()
+  }
+
   function onMainClick(target: OutputTarget) {
     setError(null)
     setMessage(null)
     setImages([])
     setPdf(null)
-    if (canCreateFree) setAskFree(target)
+    if (canCreateFree && !freeDecided) {
+      setAskFree(target)
+      return
+    }
+    if (target === 'print' && isAirPrint) printNow()
     else void output(printList, target)
   }
 
   async function withFree(create: boolean) {
     const target = askFree ?? 'print'
     setAskFree(null)
+    setFreeDecided(true)
     if (!create || !freeParent) {
-      void output(printList, target)
+      if (target === 'print' && isAirPrint) printNow()
+      else void output(printList, target)
       return
     }
     setBusy(true)
@@ -394,7 +415,14 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
       const created = await state.makeFreeLabels(freeParent.id, freeCount)
       setExtraPlaces((current) => [...current, ...created])
       const seen = new Set(printList.map((place) => place.id))
-      await output([...printList, ...created.filter((place) => !seen.has(place.id))], target)
+      const full = [...printList, ...created.filter((place) => !seen.has(place.id))]
+      if (target === 'print' && isAirPrint) {
+        // Создание меток заняло время — окно печати откроется по следующему нажатию
+        setMessage(`Свободные метки созданы (${created.length}). Нажмите «Печать» ещё раз.`)
+        setBusy(false)
+        return
+      }
+      await output(full, target)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка')
       setBusy(false)
@@ -430,11 +458,14 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     }
   }
 
-  const mainLabel = busy
-    ? 'Готовлю метки…'
-    : isAirPrint
-      ? `Печать (${printList.length})`
-      : `Подготовить метки-картинки (${printList.length})`
+  /** Страницы печати подготовлены для текущего набора — можно сразу открывать окно печати */
+  const printReady = Boolean(printJob && printJob.key === printSetKey)
+  const mainLabel =
+    busy || (isAirPrint && printList.length > 0 && !printReady)
+      ? 'Готовлю метки…'
+      : isAirPrint
+        ? `Печать (${printList.length})`
+        : `Подготовить метки-картинки (${printList.length})`
 
   return (
     <div className="stack">
@@ -545,7 +576,11 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
           ))}
         </ol>
 
-        <button type="button" onClick={() => onMainClick('print')} disabled={printList.length === 0 || busy}>
+        <button
+          type="button"
+          onClick={() => onMainClick('print')}
+          disabled={printList.length === 0 || busy || (isAirPrint && !printReady)}
+        >
           {mainLabel}
         </button>
         {isAirPrint ? (
@@ -622,7 +657,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
         </div>
       ) : null}
 
-      {isAirPrint && printJob
+      {isAirPrint && printJob && printReady
         ? createPortal(
             <div className="print-root" aria-hidden>
               <style>{`@media print { @page { size: ${printJob.pageWidthMm}mm ${printJob.pageHeightMm}mm; margin: 0; } }`}</style>
