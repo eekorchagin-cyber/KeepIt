@@ -494,6 +494,7 @@ export function MoveQrScan({
           onChange={(event) => {
             setScanSoundEnabled(event.target.checked)
             setSound(event.target.checked)
+            if (event.target.checked) playScanSound('ok')
           }}
         />
         <span>Звук при сканировании</span>

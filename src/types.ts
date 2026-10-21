@@ -53,6 +53,7 @@ export type Screen =
   | { name: 'categories' }
   | { name: 'settings' }
   | { name: 'about' }
+  | { name: 'releases' }
   | { name: 'more' }
 
 export type Place = {

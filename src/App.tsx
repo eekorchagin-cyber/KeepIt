@@ -21,6 +21,7 @@ import { MoreScreen } from './screens/MoreScreen'
 import { ObjectScreen } from './screens/ObjectScreen'
 import { PlaceScreen } from './screens/PlaceScreen'
 import { PrintLabelsScreen } from './screens/PrintLabelsScreen'
+import { ReleaseHistoryScreen } from './screens/ReleaseHistoryScreen'
 import { RemindersScreen } from './screens/RemindersScreen'
 import { ScanScreen } from './screens/ScanScreen'
 import { SearchScreen } from './screens/SearchScreen'
@@ -77,7 +78,7 @@ export default function App() {
         ref={mainRef}
         onScroll={(event) => scrollByScreen.set(screenKey, event.currentTarget.scrollTop)}
       >
-        <UpdateBanner update={update} />
+        <UpdateBanner update={update} onShowHistory={() => state.navigate({ name: 'releases' })} />
         {state.error ? <p className="error">{state.error}</p> : null}
 
         {state.screen.name === 'home' ? <HomeScreen state={state} /> : null}
@@ -110,7 +111,10 @@ export default function App() {
         {state.screen.name === 'search' ? <SearchScreen state={state} /> : null}
         {state.screen.name === 'print' ? <PrintLabelsScreen state={state} placeId={state.screen.placeId} /> : null}
         {state.screen.name === 'settings' ? <SettingsScreen state={state} /> : null}
-        {state.screen.name === 'about' ? <AboutScreen update={update} /> : null}
+        {state.screen.name === 'about' ? (
+          <AboutScreen update={update} onShowHistory={() => state.navigate({ name: 'releases' })} />
+        ) : null}
+        {state.screen.name === 'releases' ? <ReleaseHistoryScreen /> : null}
         {state.screen.name === 'lent' ? <LentItemsScreen state={state} /> : null}
         {state.screen.name === 'categories' ? <CategoriesScreen state={state} /> : null}
         {state.screen.name === 'more' ? <MoreScreen state={state} /> : null}

@@ -16,19 +16,31 @@ function buildStamp(): string {
 const stamp = buildStamp()
 const appVersion = `${pkg.version}+${stamp}`
 
-/** Необязательное описание выпуска для окна «Что нового». */
-function releaseNote(): { title?: string; notes?: string } {
-  const path = join(root, 'release-note.json')
-  if (!existsSync(path)) return {}
+type ReleaseEntry = { version: string; date: string; notes: string }
+
+/** История выпусков, новые сверху: описание для плашки «Доступна новая версия» и экран «История обновлений». */
+function releaseHistory(): ReleaseEntry[] {
+  const path = join(root, 'release-history.json')
+  if (!existsSync(path)) return []
   try {
-    const raw = JSON.parse(readFileSync(path, 'utf8')) as { title?: unknown; notes?: unknown }
-    return {
-      title: typeof raw.title === 'string' ? raw.title : undefined,
-      notes: typeof raw.notes === 'string' ? raw.notes : undefined,
-    }
+    const raw = JSON.parse(readFileSync(path, 'utf8')) as unknown
+    if (!Array.isArray(raw)) return []
+    return raw.filter(
+      (entry): entry is ReleaseEntry =>
+        typeof entry?.version === 'string' && typeof entry?.date === 'string' && typeof entry?.notes === 'string',
+    )
   } catch {
-    return {}
+    return []
   }
+}
+
+const history = releaseHistory()
+
+/** Описание текущего выпуска — только если запись в истории про эту версию. */
+function releaseNote(): { title?: string; notes?: string } {
+  const latest = history[0]
+  if (!latest || latest.version !== pkg.version) return {}
+  return { title: `KeepIt ${latest.version}`, notes: latest.notes }
 }
 
 function pagesVersionPlugin(): Plugin {
@@ -57,6 +69,7 @@ export default defineConfig({
   base: './',
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
+    __RELEASE_HISTORY__: JSON.stringify(history),
   },
   plugins: [react(), pagesVersionPlugin()],
   server: {

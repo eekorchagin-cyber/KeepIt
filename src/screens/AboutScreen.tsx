@@ -6,7 +6,7 @@ const DEVELOPER = 'eekorchagin-cyber'
 const DEVELOPER_URL = `https://github.com/${DEVELOPER}`
 const COPYRIGHT_YEAR = 2026
 
-export function AboutScreen({ update }: { update: AppUpdateState }) {
+export function AboutScreen({ update, onShowHistory }: { update: AppUpdateState; onShowHistory: () => void }) {
   const version = parseAppVersion()
   const [checkResult, setCheckResult] = useState<string | null>(null)
 
@@ -36,6 +36,9 @@ export function AboutScreen({ update }: { update: AppUpdateState }) {
           {update.checking ? 'Проверяю…' : 'Проверить обновления'}
         </button>
         {checkResult ? <p className="muted">{checkResult}</p> : null}
+        <button type="button" className="secondary" onClick={onShowHistory}>
+          История обновлений
+        </button>
       </div>
 
       <div className="panel stack">

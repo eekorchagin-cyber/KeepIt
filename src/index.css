@@ -1074,6 +1074,24 @@ html[data-theme='dark'] .scan-feedback.fail {
   color: #f3a07c;
 }
 
+.release-entry p {
+  margin: 0;
+}
+
+.release-current {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+
+.release-badge {
+  justify-self: start;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.78em;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 .gather-picked {
   align-items: center;
   padding: 6px 0;
