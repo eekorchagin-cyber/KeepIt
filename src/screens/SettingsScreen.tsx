@@ -7,6 +7,7 @@ import {
   notifyStatus,
   type NotifyStatus,
 } from '../data/updateNotifications'
+import { playScanSound, scanSoundLevel, setScanSoundLevel, type ScanSoundLevel } from '../data/scanSound'
 import type { ThemeMode } from '../types'
 
 const NOTIFY_TEXT: Record<NotifyStatus, string> = {
@@ -22,6 +23,7 @@ const NOTIFY_TEXT: Record<NotifyStatus, string> = {
 export function SettingsScreen({ state }: { state: KeepItState }) {
   const [status, setStatus] = useState<NotifyStatus>(() => notifyStatus())
   const [busy, setBusy] = useState(false)
+  const [soundLevel, setSoundLevel] = useState<ScanSoundLevel>(scanSoundLevel)
 
   async function toggleNotifications() {
     setBusy(true)
@@ -48,6 +50,24 @@ export function SettingsScreen({ state }: { state: KeepItState }) {
               { value: 'dark', label: 'Тёмная' },
             ]}
             onChange={(theme) => void state.setTheme(theme)}
+          />
+        </label>
+
+        <label className="field">
+          Звук при сканировании
+          <ChoiceSelect<ScanSoundLevel>
+            title="Звук при сканировании"
+            value={soundLevel}
+            options={[
+              { value: 'loud', label: 'Громко', hint: 'Хорошо слышно в гараже, на улице, при шуме' },
+              { value: 'quiet', label: 'Тихо', hint: 'Дома, когда рядом спят или работают' },
+              { value: 'off', label: 'Выключен', hint: 'Только зелёная или красная рамка вокруг видео' },
+            ]}
+            onChange={(level) => {
+              setScanSoundLevel(level)
+              setSoundLevel(level)
+              playScanSound('ok')
+            }}
           />
         </label>
 

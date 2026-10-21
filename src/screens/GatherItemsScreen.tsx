@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ChoiceSelect } from '../components/ChoiceSelect'
 import { ModeCategory } from '../components/ModeCategory'
 import type { KeepItState } from '../hooks/useKeepIt'
-import { listItems, listPlaces, movesWithContents, normalizeSearch } from '../data/repository'
+import { movesWithContents, normalizeSearch } from '../data/repository'
 import { canNest, nestError } from '../data/placeTypes'
 import { parseItemIdFromScan, parsePlaceFromScan } from '../data/placeCodes'
 import { MoveQrScan, type RawScanResult } from '../components/MoveItemSheet'
@@ -134,7 +134,7 @@ export function GatherItemsScreen({ state, placeId }: { state: KeepItState; plac
 
   /**
    * QR коробки, места или вещи: добавляем её в список «К переносу», камера остаётся включённой.
-   * Данные читаются из базы — сканер живёт дольше одного обновления экрана.
+   * Проверка — по данным в памяти, без чтения базы: сигнал звучит сразу после распознавания.
    */
   async function onScanned(raw: string): Promise<RawScanResult> {
     if (!place) return { ok: false, text: 'Место не найдено' }
@@ -142,15 +142,14 @@ export function GatherItemsScreen({ state, placeId }: { state: KeepItState; plac
     setMessage(null)
     const itemId = parseItemIdFromScan(raw)
     if (itemId) {
-      const item = (await listItems()).find((entry) => entry.id === itemId)
+      const item = state.findItem(itemId)
       if (!item) return { ok: false, text: 'Вещь по этой метке не найдена — возможно, она удалена.' }
       if (item.placeId === place.id) return { ok: false, text: `«${item.name}» уже лежит здесь.` }
       if (selectedItems.has(item.id)) return { ok: false, text: `«${item.name}» уже в списке к переносу.` }
       setSelectedItems((current) => new Set(current).add(item.id))
       return { ok: true, text: `Добавлено: ${item.name}` }
     }
-    const places = await listPlaces()
-    const scanned = parsePlaceFromScan(raw, places)
+    const scanned = parsePlaceFromScan(raw, state.places)
     const reject = (text: string): RawScanResult => ({ ok: false, text })
     if (!scanned) return reject('QR не распознан: это не метка KeepIt или место удалено.')
     if (scanned.id === place.id) {

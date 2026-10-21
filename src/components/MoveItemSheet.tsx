@@ -255,6 +255,7 @@ function PlaceTargetSheet({
       {mode === 'scan' ? (
         <MoveQrScan
           busy={busy}
+          places={state.places}
           onResolved={(placeId) => void onMove(placeId)}
           onFail={(message) => setError(message)}
         />
@@ -329,6 +330,7 @@ export function MoveQrScan({
   onResolved,
   onFail,
   onRawScan,
+  places,
   continuous = false,
   hint = 'Наведите камеру на QR нового места хранения',
   actionLabel = 'Перенести по коду',
@@ -339,6 +341,8 @@ export function MoveQrScan({
   onFail: (message: string) => void
   /** Своя обработка кода (место или вещь) вместо поиска места */
   onRawScan?: (raw: string) => Promise<RawScanResult>
+  /** Места из памяти программы — поиск по коду без чтения базы, сигнал сразу */
+  places?: Place[]
   /** Не закрывать камеру после принятого кода — сканировать подряд */
   continuous?: boolean
   hint?: string
@@ -350,9 +354,9 @@ export function MoveQrScan({
   const handledRef = useRef(false)
   const lastScanRef = useRef<{ raw: string; at: number } | null>(null)
   const flashTimerRef = useRef<number | undefined>(undefined)
-  const latest = useRef({ busy, onResolved, onFail, onRawScan, continuous })
+  const latest = useRef({ busy, onResolved, onFail, onRawScan, places, continuous })
   useLayoutEffect(() => {
-    latest.current = { busy, onResolved, onFail, onRawScan, continuous }
+    latest.current = { busy, onResolved, onFail, onRawScan, places, continuous }
   })
   const [manual, setManual] = useState('')
   const [cameraError, setCameraError] = useState<string | null>(null)
@@ -393,7 +397,7 @@ export function MoveQrScan({
     if (props.onRawScan) {
       outcome = await props.onRawScan(value)
     } else {
-      const place = parsePlaceFromScan(value, await listPlaces())
+      const place = parsePlaceFromScan(value, props.places ?? (await listPlaces()))
       placeId = place?.id ?? null
       outcome = place
         ? { ok: true }
@@ -455,7 +459,7 @@ export function MoveQrScan({
             /* keep scanning */
           }
           if (!cancelled && !handledRef.current) {
-            timer = window.setTimeout(() => void tick(), 350)
+            timer = window.setTimeout(() => void tick(), 150)
           }
         }
         void tick()

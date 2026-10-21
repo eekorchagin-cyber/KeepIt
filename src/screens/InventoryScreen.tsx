@@ -140,6 +140,7 @@ export function InventoryScreen({
         {error ? <p className="error">{error}</p> : null}
         <MoveQrScan
           busy={false}
+          places={state.places}
           hint="Наведите камеру на QR-метку коробки, полки или стеллажа"
           actionLabel="Открыть место по коду"
           onResolved={(id) => {

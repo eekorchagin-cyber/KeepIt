@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { parseItemIdFromScan, parsePlaceFromScan } from '../data/placeCodes'
 import { getQrDetector } from '../data/qrDetector'
-import { listItems, listPlaces } from '../data/repository'
 import { playScanSound } from '../data/scanSound'
 
 function stopStream(stream: MediaStream | null | undefined) {
@@ -34,11 +33,12 @@ export function ScanScreen({ state }: { state: KeepItState }) {
   /** true — код принят и камера закрыта; false — показали причину, сканирование продолжается */
   async function openPlace(raw: string): Promise<boolean> {
     const current = stateRef.current
-    const allPlaces = await listPlaces()
+    // Данные из памяти, без чтения базы: сигнал звучит сразу после распознавания
+    const allPlaces = current.places
     // Метка вещи — открываем её карточку
     const itemId = parseItemIdFromScan(raw)
     if (itemId) {
-      const item = (await listItems()).find((entry) => entry.id === itemId)
+      const item = current.findItem(itemId)
       if (!item) {
         playScanSound('fail')
         setMessage('Вещь по этой метке не найдена — возможно, она удалена.')
@@ -114,7 +114,7 @@ export function ScanScreen({ state }: { state: KeepItState }) {
             /* keep scanning */
           }
           if (!cancelled) {
-            timer = window.setTimeout(() => void tick(), 350)
+            timer = window.setTimeout(() => void tick(), 150)
           }
         }
         void tick()
