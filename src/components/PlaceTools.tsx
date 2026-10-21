@@ -67,7 +67,16 @@ function ToolButton({
 }
 
 /** Значки действий с местом: импорт списка, перенос сюда, инвентаризация (с датой прошлой проверки) */
-export function PlaceTools({ state, place }: { state: KeepItState; place: Place }) {
+export function PlaceTools({
+  state,
+  place,
+  leading,
+}: {
+  state: KeepItState
+  place: Place
+  /** Значок перед действиями (тип места) */
+  leading?: ReactNode
+}) {
   const session = useInventorySession()
   const inventoryActive = session?.rootId === place.id
   const doneDate = place.inventoriedAt ? formatLentDate(place.inventoriedAt) : ''
@@ -80,6 +89,7 @@ export function PlaceTools({ state, place }: { state: KeepItState; place: Place 
 
   return (
     <div className="place-tools">
+      {leading}
       <ToolButton
         label="Импорт списка вещей"
         onClick={() => state.navigate({ name: 'import-list', placeId: place.id })}

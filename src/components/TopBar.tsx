@@ -5,7 +5,7 @@ import { MoveItemSheet, MovePlaceSheet } from './MoveItemSheet'
 import { ObjectAppearanceSheet, appearanceFromPlace } from './ObjectAppearanceSheet'
 import { helpForScreen } from '../data/help'
 import { defaultObjectAppearance, objectLabelFromPlaces } from '../data/icons'
-import { PLACE_TYPES } from '../data/placeTypes'
+import { PLACE_TYPES, canNest } from '../data/placeTypes'
 import { movesWithContents } from '../data/repository'
 import { dueServiceItems } from '../data/service'
 import type { KeepItState } from '../hooks/useKeepIt'
@@ -157,8 +157,12 @@ export function TopBar({ state }: { state: KeepItState }) {
     }
   }
 
+  // Только подходящие типы: в полку — не полку, в стеллаж — не стеллаж и т. д.
+  const addParent = state.screen.name === 'place' ? state.findPlace(state.screen.placeId) : undefined
   const typeOptions =
-    state.screen.name === 'object' ? PLACE_TYPES.filter((option) => option.value === 'room') : PLACE_TYPES
+    state.screen.name === 'object'
+      ? PLACE_TYPES.filter((option) => option.value === 'room')
+      : PLACE_TYPES.filter((option) => !addParent || canNest(addParent.type, option.value))
 
   return (
     <>

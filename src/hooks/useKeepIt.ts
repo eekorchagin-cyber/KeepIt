@@ -12,6 +12,7 @@ import {
   addSubcategory,
   applyImportPlan,
   applyInventory,
+  changePlaceType,
   type InventoryApply,
   assignCategory,
   convertItemToPlace,
@@ -169,6 +170,8 @@ export type KeepItState = {
   ) => Promise<Place>
   renameCurrentPlace: (placeId: string, name: string) => Promise<Place>
   relocatePlace: (placeId: string, parentId: string) => Promise<Place>
+  /** Сменить тип места (например, «Коробка» → «Полка / ящик») с проверкой вложенности */
+  changeType: (placeId: string, type: PlaceType) => Promise<Place>
   removePlace: (placeId: string) => Promise<void>
   createItem: (input: {
     placeId: string
@@ -314,6 +317,13 @@ export function useKeepIt(): KeepItState {
         setHistory([])
         setCameBack(false)
         setScreenState({ name: 'place', placeId: match[1] })
+        return
+      }
+      const itemMatch = hash.match(/^\/item\/([0-9a-f-]{36})$/i)
+      if (itemMatch?.[1]) {
+        setHistory([])
+        setCameBack(false)
+        setScreenState({ name: 'item', itemId: itemMatch[1] })
       }
     }
     onHash()
@@ -519,6 +529,13 @@ export function useKeepIt(): KeepItState {
       const place = await renamePlace(placeId, name)
       await refresh()
       return place
+    },
+    changeType: async (placeId, type) => {
+      try {
+        return await changePlaceType(placeId, type)
+      } finally {
+        await refresh()
+      }
     },
     relocatePlace: async (placeId, parentId) => {
       const moved = await movePlace(placeId, parentId)

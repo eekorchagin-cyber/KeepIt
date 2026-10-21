@@ -20,6 +20,7 @@ import {
   recomputePlaceCodes,
 } from './placeCodes'
 import { defaultObjectAppearance, type ObjectIconId } from './icons'
+import { PLACE_TYPE_LABEL, canNest, nestError } from './placeTypes'
 import { buildDraftItems, buildSeedPlaces, defaultSettings } from './seed'
 import { isCountableUnit, unitForMode } from './units'
 import { addMonths } from './service'
@@ -476,6 +477,7 @@ export async function addPlace(input: {
   const settings = await getSettings()
   const parent = await getPlace(input.parentId)
   if (!parent) throw new Error('Родительское место не найдено')
+  if (!canNest(parent.type, input.type)) throw new Error(nestError(parent.type, input.type))
 
   const all = await db.places.toArray()
   const name = input.name.trim()
@@ -500,6 +502,30 @@ export async function addPlace(input: {
   }
   await db.places.put(place)
   return place
+}
+
+/**
+ * Сменить тип места (например, ошибочную «Коробку» на «Полку»).
+ * Проверяется, что новый тип подходит и к месту, где оно лежит, и к местам внутри него.
+ */
+export async function changePlaceType(placeId: string, type: PlaceType): Promise<Place> {
+  const place = await getPlace(placeId)
+  if (!place) throw new Error('Место не найдено')
+  if (place.type === 'object' || type === 'object') throw new Error('Тип главного объекта не меняется')
+  if (place.type === type) return place
+  const parent = place.parentId ? await getPlace(place.parentId) : undefined
+  if (parent && !canNest(parent.type, type)) throw new Error(nestError(parent.type, type))
+  const children = await db.places.where('parentId').equals(place.id).toArray()
+  const blocked = children.find((child) => !canNest(type, child.type))
+  if (blocked) {
+    throw new Error(
+      `Внутри лежит «${blocked.name}» (${PLACE_TYPE_LABEL[blocked.type]}) — в «${PLACE_TYPE_LABEL[type]}» его положить нельзя. ` +
+        'Сначала перенесите его или смените его тип.',
+    )
+  }
+  const next: Place = { ...place, type, version: place.version + 1, updatedAt: nowIso(), syncStatus: 'pending' }
+  await db.places.put(next)
+  return next
 }
 
 export async function renamePlace(placeId: string, name: string): Promise<Place> {
@@ -551,6 +577,7 @@ export async function movePlace(placeId: string, newParentId: string): Promise<P
   if (place.type === 'object') throw new Error('Корневой объект нельзя перенести')
   if (place.id === parent.id) throw new Error('Нельзя перенести место внутрь себя')
   if (place.parentId === parent.id) return place
+  if (!canNest(parent.type, place.type)) throw new Error(nestError(parent.type, place.type))
 
   const all = await db.places.toArray()
   const nested = descendantIds(place.id, all)
@@ -673,6 +700,7 @@ export async function convertItemToPlace(
   const name = input.name.trim()
   if (!name) throw new Error('Укажите название места')
   if (input.type === 'object') throw new Error('Выберите тип места')
+  if (!canNest(parent.type, input.type)) throw new Error(nestError(parent.type, input.type))
 
   const settings = await getSettings()
   const all = await db.places.toArray()

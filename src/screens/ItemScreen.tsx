@@ -3,11 +3,12 @@ import { CategorySheet } from '../components/CategoryPicker'
 import { ChoiceSelect } from '../components/ChoiceSelect'
 import { ModeCategory } from '../components/ModeCategory'
 import { ServicePanel } from '../components/ServicePanel'
+import { ItemQrPanel } from '../components/ItemQrPanel'
 import { MoveItemSheet } from '../components/MoveItemSheet'
 import { formatLentDate, isItemLent } from '../data/repository'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { formatQty } from '../data/units'
-import { PLACE_TYPES } from '../data/placeTypes'
+import { PLACE_TYPES, canNest } from '../data/placeTypes'
 import type { PlaceType } from '../types'
 
 function todayLocal(): string {
@@ -266,6 +267,7 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
       </div>
 
       <ServicePanel key={item.id} state={state} item={item} />
+      <ItemQrPanel key={`qr-${item.id}`} state={state} item={item} />
 
       {!item.needsFill ? (
         <div className="panel stack">
@@ -367,7 +369,15 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
               </label>
               <label className="field">
                 Тип
-                <ChoiceSelect title="Тип места" value={placeType} options={PLACE_TYPES} onChange={setPlaceType} />
+                <ChoiceSelect
+                  title="Тип места"
+                  value={placeType}
+                  options={PLACE_TYPES.filter((option) => {
+                    const parent = state.findPlace(item.placeId)
+                    return !parent || canNest(parent.type, option.value)
+                  })}
+                  onChange={setPlaceType}
+                />
               </label>
               {error ? <p className="error">{error}</p> : null}
               <button type="button" disabled={busy || !placeName.trim()} onClick={() => void submitToPlace()}>

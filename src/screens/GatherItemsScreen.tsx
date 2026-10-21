@@ -2,8 +2,12 @@ import { useState } from 'react'
 import { ChoiceSelect } from '../components/ChoiceSelect'
 import { ModeCategory } from '../components/ModeCategory'
 import type { KeepItState } from '../hooks/useKeepIt'
-import { movesWithContents, normalizeSearch } from '../data/repository'
+import { listItems, listPlaces, movesWithContents, normalizeSearch } from '../data/repository'
+import { canNest, nestError } from '../data/placeTypes'
+import { parseItemIdFromScan, parsePlaceFromScan } from '../data/placeCodes'
+import { MoveQrScan, type RawScanResult } from '../components/MoveItemSheet'
 import { formatQty } from '../data/units'
+import { PlaceTypeIcon } from '../components/PlaceTypeIcon'
 import type { Place } from '../types'
 
 /** Перенос в текущее место вещей и коробок из любого другого места этого объекта. */
@@ -17,6 +21,8 @@ export function GatherItemsScreen({ state, placeId }: { state: KeepItState; plac
   function movablePlaces(sourceId: string): Place[] {
     return state.childPlaces(sourceId).filter((child) => {
       if (child.id === placeId || ancestorIds.has(child.id)) return false
+      // Полку — не в полку, стеллаж — не в стеллаж и т. д.
+      if (place && !canNest(place.type, child.type)) return false
       if (movesWithContents(child.type)) return true
       const contents = state.contentsOf(child.id)
       return contents.places + contents.items === 0
@@ -48,6 +54,7 @@ export function GatherItemsScreen({ state, placeId }: { state: KeepItState; plac
       ancestors.find((entry) => contentCount(entry.id) > 0)?.id ?? ancestors[0]?.id ?? otherPlaces[0]?.id ?? null,
   )
   const [query, setQuery] = useState('')
+  const [scanning, setScanning] = useState(false)
   const [selectedItems, setSelectedItems] = useState<Set<string>>(() => new Set())
   const [selectedPlaces, setSelectedPlaces] = useState<Set<string>>(() => new Set())
   const [busy, setBusy] = useState(false)
@@ -72,8 +79,17 @@ export function GatherItemsScreen({ state, placeId }: { state: KeepItState; plac
     : sourceItems
   const visiblePlaces = q ? sourcePlaces.filter((entry) => normalizeSearch(entry.name).includes(q)) : sourcePlaces
 
-  const itemIds = sourceItems.filter((item) => selectedItems.has(item.id)).map((item) => item.id)
-  const placeIds = sourcePlaces.filter((entry) => selectedPlaces.has(entry.id)).map((entry) => entry.id)
+  // Отметки копятся из разных мест: смена «Откуда взять» и сканирование их не сбрасывают
+  const pickedPlaces = [...selectedPlaces].flatMap((id) => {
+    const entry = state.findPlace(id)
+    return entry ? [entry] : []
+  })
+  const pickedItems = [...selectedItems].flatMap((id) => {
+    const item = state.findItem(id)
+    return item ? [item] : []
+  })
+  const itemIds = pickedItems.map((item) => item.id)
+  const placeIds = pickedPlaces.map((entry) => entry.id)
   const selectedCount = itemIds.length + placeIds.length
   const visibleCount = visibleItems.length + visiblePlaces.length
   const allVisibleChecked =
@@ -106,11 +122,60 @@ export function GatherItemsScreen({ state, placeId }: { state: KeepItState; plac
 
   function chooseSource(id: string) {
     setSourceId(id || null)
-    setSelectedItems(new Set())
-    setSelectedPlaces(new Set())
     setQuery('')
     setMessage(null)
     setError(null)
+  }
+
+  function pathLabel(placeIdOf: string): string {
+    const parts = state.pathFor(placeIdOf)
+    return (parts.length > 1 ? parts.slice(1) : parts).map((part) => part.name).join(' / ')
+  }
+
+  /**
+   * QR коробки, места или вещи: добавляем её в список «К переносу», камера остаётся включённой.
+   * Данные читаются из базы — сканер живёт дольше одного обновления экрана.
+   */
+  async function onScanned(raw: string): Promise<RawScanResult> {
+    if (!place) return { ok: false, text: 'Место не найдено' }
+    setError(null)
+    setMessage(null)
+    const itemId = parseItemIdFromScan(raw)
+    if (itemId) {
+      const item = (await listItems()).find((entry) => entry.id === itemId)
+      if (!item) return { ok: false, text: 'Вещь по этой метке не найдена — возможно, она удалена.' }
+      if (item.placeId === place.id) return { ok: false, text: `«${item.name}» уже лежит здесь.` }
+      if (selectedItems.has(item.id)) return { ok: false, text: `«${item.name}» уже в списке к переносу.` }
+      setSelectedItems((current) => new Set(current).add(item.id))
+      return { ok: true, text: `Добавлено: ${item.name}` }
+    }
+    const places = await listPlaces()
+    const scanned = parsePlaceFromScan(raw, places)
+    const reject = (text: string): RawScanResult => ({ ok: false, text })
+    if (!scanned) return reject('QR не распознан: это не метка KeepIt или место удалено.')
+    if (scanned.id === place.id) {
+      return reject('Это метка этого же места — отсканируйте коробку или вещь, которую нужно перенести.')
+    }
+    if (ancestorIds.has(scanned.id) || scanned.type === 'object') {
+      return reject(`«${scanned.name}» нельзя перенести сюда: оно снаружи этого места.`)
+    }
+    if (scanned.parentId === place.id) return reject(`«${scanned.name}» уже лежит здесь.`)
+    if (!canNest(place.type, scanned.type)) return reject(nestError(place.type, scanned.type))
+    const contents = state.contentsOf(scanned.id)
+    if (!movesWithContents(scanned.type) && contents.places + contents.items > 0) {
+      return reject(`«${scanned.name}» не пустое: с содержимым переносятся только коробки и контейнеры.`)
+    }
+    if (selectedPlaces.has(scanned.id)) return reject(`«${scanned.name}» уже в списке к переносу.`)
+    setSelectedPlaces((current) => new Set(current).add(scanned.id))
+    return { ok: true, text: `Добавлено: ${scanned.name}` }
+  }
+
+  function unpick(setter: typeof setSelectedItems, id: string) {
+    setter((current) => {
+      const next = new Set(current)
+      next.delete(id)
+      return next
+    })
   }
 
   async function moveSelected() {
@@ -153,6 +218,21 @@ export function GatherItemsScreen({ state, placeId }: { state: KeepItState; plac
               </button>
             ))}
           </div>
+        ) : null}
+        <button type="button" className="secondary" onClick={() => setScanning((current) => !current)}>
+          {scanning ? 'Закрыть сканер' : 'Сканировать QR коробки или вещи'}
+        </button>
+        {scanning ? (
+          <MoveQrScan
+            busy={busy}
+            continuous
+            hint="Сканируйте метки коробок, мест и вещей подряд — каждая добавится в список «К переносу»"
+            actionLabel="Добавить по коду"
+            manualPlaceholder="Код или путь коробки"
+            onResolved={() => undefined}
+            onRawScan={onScanned}
+            onFail={() => undefined}
+          />
         ) : null}
         {otherPlaces.length > 0 ? (
           <label className="field">
@@ -205,7 +285,10 @@ export function GatherItemsScreen({ state, placeId }: { state: KeepItState; plac
                             onChange={() => toggleIn(setSelectedPlaces, entry.id)}
                           />
                           <span className="stack-tight">
-                            <strong>{entry.name}</strong>
+                            <strong>
+                              <PlaceTypeIcon type={entry.type} />
+                              {entry.name}
+                            </strong>
                             <span className="muted">
                               {contents.items + contents.places === 0
                                 ? 'пусто'
@@ -248,6 +331,64 @@ export function GatherItemsScreen({ state, placeId }: { state: KeepItState; plac
         </div>
       ) : null}
 
+      {selectedCount > 0 ? (
+        <div className="panel stack">
+          <div className="row">
+            <strong className="grow">К переносу: {selectedCount}</strong>
+            <button
+              type="button"
+              className="ghost"
+              disabled={busy}
+              onClick={() => {
+                setSelectedItems(new Set())
+                setSelectedPlaces(new Set())
+              }}
+            >
+              Очистить
+            </button>
+          </div>
+          <div className="list">
+            {pickedPlaces.map((entry) => (
+              <div key={entry.id} className="row gather-picked">
+                <span className="stack-tight grow">
+                  <strong>
+                    <PlaceTypeIcon type={entry.type} />
+                    {entry.name}
+                  </strong>
+                  <span className="muted">из: {entry.parentId ? pathLabel(entry.parentId) : '—'}</span>
+                </span>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label={`Убрать «${entry.name}» из списка`}
+                  onClick={() => unpick(setSelectedPlaces, entry.id)}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            {pickedItems.map((item) => (
+              <div key={item.id} className="row gather-picked">
+                <span className="stack-tight grow">
+                  <strong>{item.name}</strong>
+                  <span className="muted">
+                    {formatQty(item.quantity, item.unit)} · из: {pathLabel(item.placeId)}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label={`Убрать «${item.name}» из списка`}
+                  onClick={() => unpick(setSelectedItems, item.id)}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <button type="button" className="secondary" onClick={() => state.jump({ name: 'place', placeId })}>
         Готово — к месту «{place.name}»
       </button>
@@ -258,7 +399,7 @@ export function GatherItemsScreen({ state, placeId }: { state: KeepItState; plac
         <div className="row">
           <span className="grow muted">Отмечено: {selectedCount}</span>
           <button type="button" disabled={busy || selectedCount === 0} onClick={() => void moveSelected()}>
-            Перенести сюда
+            Перенести сюда{selectedCount > 0 ? ` (${selectedCount})` : ''}
           </button>
         </div>
       </div>

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeepItState } from '../hooks/useKeepIt'
-import { parsePlaceFromScan } from '../data/placeCodes'
+import { parseItemIdFromScan, parsePlaceFromScan } from '../data/placeCodes'
 import { getQrDetector } from '../data/qrDetector'
-import { listPlaces } from '../data/repository'
+import { listItems, listPlaces } from '../data/repository'
+import { playScanSound } from '../data/scanSound'
 
 function stopStream(stream: MediaStream | null | undefined) {
   if (!stream) return
@@ -30,19 +31,41 @@ export function ScanScreen({ state }: { state: KeepItState }) {
     streamRef.current = null
   }
 
-  async function openPlace(raw: string) {
+  /** true — код принят и камера закрыта; false — показали причину, сканирование продолжается */
+  async function openPlace(raw: string): Promise<boolean> {
     const current = stateRef.current
     const allPlaces = await listPlaces()
+    // Метка вещи — открываем её карточку
+    const itemId = parseItemIdFromScan(raw)
+    if (itemId) {
+      const item = (await listItems()).find((entry) => entry.id === itemId)
+      if (!item) {
+        playScanSound('fail')
+        setMessage('Вещь по этой метке не найдена — возможно, она удалена.')
+        return false
+      }
+      playScanSound('ok')
+      releaseCamera()
+      const itemPlace = allPlaces.find((entry) => entry.id === item.placeId)
+      if (itemPlace && itemPlace.objectKey !== current.settings?.activeObject) {
+        await current.setActiveObject(itemPlace.objectKey)
+      }
+      current.navigate({ name: 'item', itemId: item.id })
+      return true
+    }
     const place = parsePlaceFromScan(raw, allPlaces)
     if (!place) {
+      playScanSound('fail')
       setMessage('Место не найдено. Проверьте код или выбранный объект хранения.')
-      return
+      return false
     }
+    playScanSound('ok')
     releaseCamera()
     if (place.objectKey !== current.settings?.activeObject) {
       await current.setActiveObject(place.objectKey)
     }
     current.navigate({ name: 'place', placeId: place.id })
+    return true
   }
 
   useEffect(() => {
@@ -74,14 +97,18 @@ export function ScanScreen({ state }: { state: KeepItState }) {
         await video.play()
 
         const detector = getQrDetector()
+        let last: { raw: string; at: number } | null = null
         const tick = async () => {
           if (cancelled || !videoRef.current || !streamRef.current) return
           try {
             const codes = await detector.detect(videoRef.current)
             const value = codes[0]?.rawValue
             if (value) {
-              await openPlace(value)
-              return
+              // Неподходящий код, пока он перед камерой, повторно не проверяем — без серии сигналов
+              const now = Date.now()
+              const repeat = last && last.raw === value && now - last.at < 2000
+              last = { raw: value, at: now }
+              if (!repeat && (await openPlace(value))) return
             }
           } catch {
             /* keep scanning */

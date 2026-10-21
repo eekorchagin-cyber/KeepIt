@@ -47,7 +47,24 @@ export function placeUrl(placeId: string): string {
   return `${base}#/place/${placeId}`
 }
 
+/** Ссылка из QR-метки вещи: сканер открывает её карточку */
+export function itemUrl(itemId: string): string {
+  const base =
+    typeof location !== 'undefined'
+      ? `${location.origin}${location.pathname.replace(/\/$/, '')}`
+      : ''
+  return `${base}#/item/${itemId}`
+}
+
+/** Код вещи из отсканированного QR (только метки вещей — ссылка с «#/item/…») */
+export function parseItemIdFromScan(raw: string): string | null {
+  const match = raw.trim().match(/#\/item\/([0-9a-f-]{36})/i)
+  return match?.[1] ?? null
+}
+
 export function parsePlaceFromScan(raw: string, places: Place[]): Place | null {
+  // Метка вещи — не место (иначе UUID вещи искался бы среди мест)
+  if (parseItemIdFromScan(raw)) return null
   const value = raw.trim()
   if (!value) return null
 

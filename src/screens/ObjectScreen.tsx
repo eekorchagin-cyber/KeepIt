@@ -5,6 +5,7 @@ import { PlaceTools } from '../components/PlaceTools'
 import { BadgeCountToggle } from '../components/BadgeCountToggle'
 import { FreeLabelsGroup } from '../components/FreeLabelsGroup'
 import { isUnusedFreeLabel } from '../data/repository'
+import { PlaceTypeIcon } from '../components/PlaceTypeIcon'
 import type { ObjectKey } from '../types'
 
 export function ObjectScreen({ state, objectKey }: { state: KeepItState; objectKey: ObjectKey }) {
@@ -54,7 +55,10 @@ export function ObjectScreen({ state, objectKey }: { state: KeepItState; objectK
               onClick={() => state.navigate({ name: 'place', placeId: room.id })}
             >
               <span>
-                <strong>{room.name}</strong>
+                <strong>
+                  <PlaceTypeIcon type={room.type} />
+                  {room.name}
+                </strong>
                 <span className="place-code muted">{room.code}</span>
               </span>
               <span className="badge">{state.placeBadge(room.id)}</span>

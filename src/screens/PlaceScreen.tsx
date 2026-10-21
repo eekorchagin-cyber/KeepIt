@@ -7,7 +7,61 @@ import { isItemLent, isUnusedFreeLabel } from '../data/repository'
 import { formatQty } from '../data/units'
 import { BadgeCountToggle } from '../components/BadgeCountToggle'
 import { FreeLabelsGroup } from '../components/FreeLabelsGroup'
+import { ChoiceSelect } from '../components/ChoiceSelect'
+import { PLACE_TYPES, PLACE_TYPE_LABEL, PLACE_TYPE_SHORT, canNest } from '../data/placeTypes'
+import { PlaceTypeIcon } from '../components/PlaceTypeIcon'
 import type { Place } from '../types'
+
+/**
+ * Тип места значком со словом в ряду инструментов; нажатие — выбор другого типа
+ * (только подходящих к тому, где место лежит, и к тому, что в нём).
+ */
+function PlaceTypeButton({
+  state,
+  place,
+  misplaced,
+  onError,
+}: {
+  state: KeepItState
+  place: Place
+  misplaced: boolean
+  onError: (message: string | null) => void
+}) {
+  const parent = place.parentId ? state.findPlace(place.parentId) : undefined
+  const children = state.childPlaces(place.id)
+  const options = PLACE_TYPES.filter(
+    (option) =>
+      option.value === place.type ||
+      ((!parent || canNest(parent.type, option.value)) && children.every((child) => canNest(option.value, child.type))),
+  ).map((option) => ({ ...option, icon: <PlaceTypeIcon type={option.value} decorative /> }))
+
+  return (
+    <ChoiceSelect
+      title={`Тип места «${place.name}»`}
+      value={place.type}
+      options={options}
+      onChange={(type) => {
+        onError(null)
+        void state.changeType(place.id, type).catch((err: unknown) => {
+          onError(err instanceof Error ? err.message : 'Не удалось сменить тип')
+        })
+      }}
+      renderTrigger={(open) => (
+        <button
+          type="button"
+          className={`icon-btn tool-btn tool-type${misplaced ? ' is-misplaced' : ''}`}
+          aria-label={`Тип места: ${PLACE_TYPE_LABEL[place.type]} — нажмите, чтобы сменить`}
+          title={`Тип места: ${PLACE_TYPE_LABEL[place.type]}`}
+          aria-haspopup="dialog"
+          onClick={open}
+        >
+          <PlaceTypeIcon type={place.type} decorative />
+          <span className="tool-type-name">{PLACE_TYPE_SHORT[place.type]}</span>
+        </button>
+      )}
+    />
+  )
+}
 
 function NestedPlaces({ state, places }: { state: KeepItState; places: Place[] }) {
   const [selecting, setSelecting] = useState(false)
@@ -91,10 +145,13 @@ function NestedPlaces({ state, places }: { state: KeepItState; places: Place[] }
       <div className="list">
         {(selecting ? places : places.filter((place) => !unusedFree.includes(place))).map((child) =>
           selecting ? (
-            <label key={child.id} className="check-row">
+              <label key={child.id} className="check-row">
               <input type="checkbox" checked={selected.has(child.id)} onChange={() => toggle(child.id)} />
               <span className="stack-tight">
-                <strong>{child.name}</strong>
+                <strong>
+                  <PlaceTypeIcon type={child.type} />
+                  {child.name}
+                </strong>
                 <span className="muted">{isEmpty(child) ? 'пусто' : `вещей: ${state.contentsOf(child.id).items}`}</span>
               </span>
             </label>
@@ -106,7 +163,10 @@ function NestedPlaces({ state, places }: { state: KeepItState; places: Place[] }
               onClick={() => state.navigate({ name: 'place', placeId: child.id })}
             >
               <span>
-                <strong>{child.name}</strong>
+                <strong>
+                  <PlaceTypeIcon type={child.type} />
+                  {child.name}
+                </strong>
                 <span className="place-code muted">{child.code}</span>
               </span>
               <span className="badge">{state.placeBadge(child.id)}</span>
@@ -149,6 +209,7 @@ export function PlaceScreen({ state, placeId }: { state: KeepItState; placeId: s
   const items = state.itemsInPlace(placeId)
   const uncategorized = state.uncategorizedItems(placeId).length
   const duplicates = state.duplicateGroups(placeId).length
+  const [typeError, setTypeError] = useState<string | null>(null)
   if (!place) {
     return (
       <div className="panel stack">
@@ -159,6 +220,9 @@ export function PlaceScreen({ state, placeId }: { state: KeepItState; placeId: s
       </div>
     )
   }
+
+  const parentPlace = place.parentId ? state.findPlace(place.parentId) : undefined
+  const misplacedIn = parentPlace && !canNest(parentPlace.type, place.type) ? parentPlace : null
 
   return (
     <div className="stack">
@@ -177,8 +241,24 @@ export function PlaceScreen({ state, placeId }: { state: KeepItState; placeId: s
               </span>
             ))}
           </div>
-          <PlaceTools state={state} place={place} />
+          <PlaceTools
+            state={state}
+            place={place}
+            leading={
+              place.type !== 'object' ? (
+                <PlaceTypeButton state={state} place={place} misplaced={Boolean(misplacedIn)} onError={setTypeError} />
+              ) : null
+            }
+          />
         </div>
+        {misplacedIn ? (
+          <p className="place-type-warning">
+            Это место — «{PLACE_TYPE_LABEL[place.type]}», а лежит в «{misplacedIn.name}» (тип «
+            {PLACE_TYPE_LABEL[misplacedIn.type]}») — так быть не должно. Нажмите значок «{PLACE_TYPE_SHORT[place.type]}»
+            выше и выберите другой тип (например, «Коробка») или перенесите место через «···» → «Перенести».
+          </p>
+        ) : null}
+        {typeError ? <p className="error">{typeError}</p> : null}
         {duplicates > 0 ? (
           <button
             type="button"

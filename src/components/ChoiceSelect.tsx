@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
 export type ChoiceOption<T extends string | number> = {
@@ -8,6 +8,8 @@ export type ChoiceOption<T extends string | number> = {
   hint?: string
   /** Заголовок группы, под которым показывается вариант */
   group?: string
+  /** Значок слева от названия */
+  icon?: ReactNode
 }
 
 /**
@@ -23,6 +25,7 @@ export function ChoiceSelect<T extends string | number>({
   placeholder = 'Выберите',
   compact = false,
   disabled = false,
+  renderTrigger,
 }: {
   value: T
   options: ChoiceOption<T>[]
@@ -34,6 +37,8 @@ export function ChoiceSelect<T extends string | number>({
   /** Узкое поле (например, единица в строке импорта) */
   compact?: boolean
   disabled?: boolean
+  /** Своя кнопка вместо поля (например, значок) — получает функцию открытия списка */
+  renderTrigger?: (open: () => void) => ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const current = options.find((option) => option.value === value)
@@ -48,19 +53,23 @@ export function ChoiceSelect<T extends string | number>({
 
   return (
     <>
-      <button
-        type="button"
-        className={`field-trigger choice-trigger${compact ? ' compact' : ''}`}
-        aria-label={ariaLabel ? `${ariaLabel}: ${current?.label ?? placeholder}` : undefined}
-        aria-haspopup="dialog"
-        disabled={disabled}
-        onClick={() => setOpen(true)}
-      >
-        <span className={current ? undefined : 'muted'}>{current?.label ?? placeholder}</span>
-        <span className="muted" aria-hidden>
-          ›
-        </span>
-      </button>
+      {renderTrigger ? (
+        renderTrigger(() => setOpen(true))
+      ) : (
+        <button
+          type="button"
+          className={`field-trigger choice-trigger${compact ? ' compact' : ''}`}
+          aria-label={ariaLabel ? `${ariaLabel}: ${current?.label ?? placeholder}` : undefined}
+          aria-haspopup="dialog"
+          disabled={disabled}
+          onClick={() => setOpen(true)}
+        >
+          <span className={current ? undefined : 'muted'}>{current?.label ?? placeholder}</span>
+          <span className="muted" aria-hidden>
+            ›
+          </span>
+        </button>
+      )}
 
       {open
         ? createPortal(
@@ -90,6 +99,7 @@ export function ChoiceSelect<T extends string | number>({
                                 if (!selected) onChange(option.value)
                               }}
                             >
+                              {option.icon ? <span className="choice-icon">{option.icon}</span> : null}
                               <span className="stack-tight">
                                 <strong>{option.label}</strong>
                                 {option.hint ? <span className="muted">{option.hint}</span> : null}

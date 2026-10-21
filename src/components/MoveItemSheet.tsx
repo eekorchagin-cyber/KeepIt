@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { ObjectBadge } from './ObjectBadge'
+import { PlaceTypeIcon } from './PlaceTypeIcon'
 import { rootObjects } from '../data/icons'
 import { parsePlaceFromScan } from '../data/placeCodes'
 import { getQrDetector } from '../data/qrDetector'
+import { playScanSound, scanSoundEnabled, setScanSoundEnabled } from '../data/scanSound'
 import { listPlaces, movesWithContents } from '../data/repository'
+import { canNest, nestError } from '../data/placeTypes'
 import type { Place } from '../types'
 
 function stopStream(stream: MediaStream | null | undefined) {
@@ -119,6 +122,7 @@ export function MovePlaceSheet({
       subjectLabel={subjectLabel}
       currentPlaceId={place.parentId}
       blockedIds={blocked}
+      targetError={(target) => (canNest(target.type, place.type) ? null : nestError(target.type, place.type))}
       confirmLabel={(target) =>
         withContents ? `Перенести сюда с содержимым: ${target.name}` : `Перенести сюда: ${target.name}`
       }
@@ -142,6 +146,7 @@ function PlaceTargetSheet({
   subjectLabel,
   currentPlaceId,
   blockedIds,
+  targetError,
   confirmLabel,
   alreadyHereLabel,
   onConfirm,
@@ -153,6 +158,8 @@ function PlaceTargetSheet({
   /** Место, которое считается «уже здесь» (для вещи — текущее; для места — текущий родитель). */
   currentPlaceId: string | null
   blockedIds: Set<string>
+  /** Почему сюда нельзя (например, полку в полку); null — можно */
+  targetError?: (target: Place) => string | null
   confirmLabel: (place: Place) => string
   alreadyHereLabel: string
   onConfirm: (placeId: string) => Promise<void>
@@ -170,7 +177,8 @@ function PlaceTargetSheet({
     (place) => !blockedIds.has(place.id),
   )
   const isCurrentPlace = Boolean(current && current.id === currentPlaceId)
-  const canConfirmHere = Boolean(current && !blockedIds.has(current.id) && !isCurrentPlace)
+  const hereError = current && targetError ? targetError(current) : null
+  const canConfirmHere = Boolean(current && !blockedIds.has(current.id) && !isCurrentPlace && !hereError)
 
   async function onMove(placeId: string) {
     if (blockedIds.has(placeId)) {
@@ -180,6 +188,11 @@ function PlaceTargetSheet({
     const target = state.findPlace(placeId) ?? (await listPlaces()).find((place) => place.id === placeId)
     if (!target) {
       setError('Место не найдено')
+      return
+    }
+    const reason = targetError?.(target)
+    if (reason) {
+      setError(reason)
       return
     }
     if (target.id === currentPlaceId) {
@@ -261,6 +274,7 @@ function PlaceTargetSheet({
               {isCurrentPlace ? alreadyHereLabel : confirmLabel(current)}
             </button>
           ) : null}
+          {hereError && !isCurrentPlace ? <p className="muted">{hereError}</p> : null}
 
           <div className="list move-list">
             {children.length === 0 ? (
@@ -284,7 +298,10 @@ function PlaceTargetSheet({
                   <span className="list-item-main">
                     {place.type === 'object' ? <ObjectBadge place={place} size="sm" /> : null}
                     <span className="move-step">
-                      <strong>{place.name}</strong>
+                      <strong>
+                        {place.type !== 'object' ? <PlaceTypeIcon type={place.type} /> : null}
+                        {place.name}
+                      </strong>
                       <span className="muted">
                         {here ? 'сейчас здесь · ' : ''}
                         {nested > 0 ? `внутри: ${nested}` : 'открыть / выбрать'}
@@ -301,24 +318,47 @@ function PlaceTargetSheet({
   )
 }
 
+/** Результат своей обработки кода: принят (с пояснением) или отклонён с причиной. */
+export type RawScanResult = { ok: true; text?: string } | { ok: false; text: string }
+
+/** Тот же код, пока он остаётся перед камерой (и ещё столько мс после), повторно не обрабатывается. */
+const REPEAT_SCAN_MS = 2000
+
 export function MoveQrScan({
   busy,
   onResolved,
   onFail,
+  onRawScan,
+  continuous = false,
   hint = 'Наведите камеру на QR нового места хранения',
   actionLabel = 'Перенести по коду',
+  manualPlaceholder = 'Дача / Каменный гараж / …',
 }: {
   busy: boolean
   onResolved: (placeId: string) => void
   onFail: (message: string) => void
+  /** Своя обработка кода (место или вещь) вместо поиска места */
+  onRawScan?: (raw: string) => Promise<RawScanResult>
+  /** Не закрывать камеру после принятого кода — сканировать подряд */
+  continuous?: boolean
   hint?: string
   actionLabel?: string
+  manualPlaceholder?: string
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const handledRef = useRef(false)
+  const lastScanRef = useRef<{ raw: string; at: number } | null>(null)
+  const flashTimerRef = useRef<number | undefined>(undefined)
+  const latest = useRef({ busy, onResolved, onFail, onRawScan, continuous })
+  useLayoutEffect(() => {
+    latest.current = { busy, onResolved, onFail, onRawScan, continuous }
+  })
   const [manual, setManual] = useState('')
   const [cameraError, setCameraError] = useState<string | null>(null)
+  const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null)
+  const [flash, setFlash] = useState<'ok' | 'fail' | null>(null)
+  const [sound, setSound] = useState(scanSoundEnabled)
 
   function releaseCamera() {
     const video = videoRef.current
@@ -330,17 +370,49 @@ export function MoveQrScan({
     streamRef.current = null
   }
 
-  async function resolveRaw(raw: string) {
-    if (handledRef.current || busy) return
-    const places = await listPlaces()
-    const place = parsePlaceFromScan(raw, places)
-    if (!place) {
-      onFail('Место по QR не найдено. Проверьте метку или введите путь вручную.')
+  function signal(kind: 'ok' | 'fail') {
+    playScanSound(kind)
+    setFlash(kind)
+    window.clearTimeout(flashTimerRef.current)
+    flashTimerRef.current = window.setTimeout(() => setFlash(null), 700)
+  }
+
+  async function resolveRaw(raw: string, fromCamera: boolean) {
+    const value = raw.trim()
+    const props = latest.current
+    if (handledRef.current || props.busy || !value) return
+    if (fromCamera) {
+      const now = Date.now()
+      const last = lastScanRef.current
+      lastScanRef.current = { raw: value, at: now }
+      if (last && last.raw === value && now - last.at < REPEAT_SCAN_MS) return
+    }
+
+    let outcome: RawScanResult
+    let placeId: string | null = null
+    if (props.onRawScan) {
+      outcome = await props.onRawScan(value)
+    } else {
+      const place = parsePlaceFromScan(value, await listPlaces())
+      placeId = place?.id ?? null
+      outcome = place
+        ? { ok: true }
+        : { ok: false, text: 'Место по QR не найдено. Проверьте метку или введите путь вручную.' }
+    }
+
+    signal(outcome.ok ? 'ok' : 'fail')
+    if (props.continuous) setFeedback(outcome.text ? { ok: outcome.ok, text: outcome.text } : null)
+    if (!outcome.ok) {
+      props.onFail(outcome.text)
+      return
+    }
+    if (props.continuous) {
+      if (!fromCamera) setManual('')
       return
     }
     handledRef.current = true
     releaseCamera()
-    onResolved(place.id)
+    if (placeId) props.onResolved(placeId)
   }
 
   useEffect(() => {
@@ -378,10 +450,7 @@ export function MoveQrScan({
           try {
             const codes = await detector.detect(videoRef.current)
             const value = codes[0]?.rawValue
-            if (value) {
-              await resolveRaw(value)
-              return
-            }
+            if (value) await resolveRaw(value, true)
           } catch {
             /* keep scanning */
           }
@@ -402,6 +471,7 @@ export function MoveQrScan({
     return () => {
       cancelled = true
       if (timer) window.clearTimeout(timer)
+      window.clearTimeout(flashTimerRef.current)
       releaseCamera()
     }
   }, [])
@@ -409,18 +479,35 @@ export function MoveQrScan({
   return (
     <div className="stack">
       <p className="muted">{hint}</p>
-      <video ref={videoRef} className="scanner-video move-scan-video" muted playsInline />
+      <video
+        ref={videoRef}
+        className={`scanner-video move-scan-video${flash ? ` scan-flash-${flash}` : ''}`}
+        muted
+        playsInline
+      />
+      {feedback ? <p className={`scan-feedback ${feedback.ok ? 'ok' : 'fail'}`}>{feedback.text}</p> : null}
       {cameraError ? <p className="muted">{cameraError}</p> : null}
+      <label className="check-row scan-sound-toggle">
+        <input
+          type="checkbox"
+          checked={sound}
+          onChange={(event) => {
+            setScanSoundEnabled(event.target.checked)
+            setSound(event.target.checked)
+          }}
+        />
+        <span>Звук при сканировании</span>
+      </label>
       <label className="field">
         Или введите код / путь
         <input
           value={manual}
           onChange={(event) => setManual(event.target.value)}
-          placeholder="Дача / Каменный гараж / …"
+          placeholder={manualPlaceholder}
           disabled={busy}
         />
       </label>
-      <button type="button" disabled={busy || !manual.trim()} onClick={() => void resolveRaw(manual)}>
+      <button type="button" disabled={busy || !manual.trim()} onClick={() => void resolveRaw(manual, false)}>
         {actionLabel}
       </button>
     </div>

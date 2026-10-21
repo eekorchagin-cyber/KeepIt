@@ -966,6 +966,138 @@ html[data-theme='dark'] .search-missing {
   font-weight: 600;
 }
 
+.item-qr {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.item-qr img {
+  border-radius: 8px;
+  background: #fff;
+}
+
+/* Тип места значком перед названием: помещение, стеллаж, полка, коробка… */
+.place-type-icon {
+  width: 1.05em;
+  height: 1.05em;
+  margin-right: 0.35em;
+  vertical-align: -0.16em;
+  flex-shrink: 0;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon-btn.tool-btn.tool-type {
+  width: auto;
+  padding: 0 10px 0 9px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg-elevated));
+}
+
+.tool-type .place-type-icon {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  vertical-align: 0;
+}
+
+.tool-type-name {
+  font-size: 0.7em;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.icon-btn.tool-btn.tool-type.is-misplaced {
+  border-color: color-mix(in srgb, #b7791f 60%, var(--line));
+  background: color-mix(in srgb, #b7791f 12%, var(--bg-elevated));
+}
+
+.list-item.choice-option:has(> .choice-icon) {
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+}
+
+.choice-icon {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.choice-icon .place-type-icon {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+}
+
+/* Сканер: вспышка рамки и строка результата под видео */
+.scanner-video {
+  transition: box-shadow 0.15s;
+}
+
+.scanner-video.scan-flash-ok {
+  box-shadow: 0 0 0 4px #2f9e57;
+}
+
+.scanner-video.scan-flash-fail {
+  box-shadow: 0 0 0 4px #c2410c;
+}
+
+.scan-feedback {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.scan-feedback.ok {
+  color: #1f7a42;
+  background: color-mix(in srgb, #2f9e57 12%, transparent);
+}
+
+.scan-feedback.fail {
+  color: #b23a0c;
+  background: color-mix(in srgb, #c2410c 10%, transparent);
+}
+
+html[data-theme='dark'] .scan-feedback.ok {
+  color: #7fd6a0;
+}
+
+html[data-theme='dark'] .scan-feedback.fail {
+  color: #f3a07c;
+}
+
+.gather-picked {
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.gather-picked:last-child {
+  border-bottom: 0;
+}
+
+.place-type-warning {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, #b7791f 45%, var(--line));
+  background: color-mix(in srgb, #b7791f 10%, var(--bg-elevated));
+  color: #9a6700;
+  font-size: 0.9em;
+}
+
+html[data-theme='dark'] .place-type-warning {
+  color: #f0c674;
+}
+
 .free-labels-row {
   border-style: dashed;
 }
