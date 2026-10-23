@@ -8,155 +8,117 @@ export const TEXT_PLACEMENT_OPTIONS: Array<{ value: TextPlacement; label: string
 
 export type PaperSize = 'A4' | 'A5'
 
-export const PAPER_OPTIONS: Array<{ value: PaperSize; label: string }> = [
-  { value: 'A4', label: 'A4' },
-  { value: 'A5', label: 'A5' },
+export const PAPER_OPTIONS: Array<{ value: PaperSize; label: string; hint: string }> = [
+  { value: 'A4', label: 'A4', hint: 'целый лист' },
+  { value: 'A5', label: 'A5', hint: 'половина листа A4' },
 ]
 
-/**
- * labels — готовый лист этикеток A4; half — его половина (лист A4 разрезан поперёк, 210 × 148,5 мм);
- * plain — лист без разметки (обычная или сплошная самоклеящаяся бумага), метки режут по пунктиру.
- */
-export type SheetKind = 'labels' | 'half' | 'plain'
+const A4_PAGE = { widthMm: 210, heightMm: 297 }
+/** A5 — половина листа A4, разрезанного поперёк: 210 × 148,5 мм, лежит горизонтально */
+const A5_PAGE = { widthMm: 210, heightMm: 148.5 }
 
-export const SHEET_KIND_TITLE: Record<SheetKind, string> = {
-  labels: 'Листы этикеток A4',
-  half: 'Половина листа этикеток A4',
-  plain: 'Без разметки — обычная или самоклеящаяся бумага, разрезать по пунктиру',
+/**
+ * Размер этикетки — как на стандартном самоклеящемся листе A4 с прорезями (Lomond, Avery, Office).
+ * Один и тот же для A4 и A5: на A5 помещается верхняя половина сетки листа.
+ */
+export type LabelFormat = {
+  id: string
+  cols: number
+  /** Рядов на целом листе A4 */
+  rowsA4: number
+  widthMm: number
+  heightMm: number
+  gapXMm: number
 }
 
-/** Лист с этикетками: формат, сетка, размер этикетки и промежутки (мм); поля по бокам — поровну */
+export const LABEL_FORMATS: LabelFormat[] = [
+  { id: 'a4-65', cols: 5, rowsA4: 13, widthMm: 38.1, heightMm: 21.2, gapXMm: 2.5 },
+  { id: 'a4-40', cols: 4, rowsA4: 10, widthMm: 48.5, heightMm: 25.4, gapXMm: 0 },
+  { id: 'a4-24', cols: 3, rowsA4: 8, widthMm: 70, heightMm: 37, gapXMm: 0 },
+  { id: 'a4-21', cols: 3, rowsA4: 7, widthMm: 70, heightMm: 42.3, gapXMm: 0 },
+  { id: 'a4-16', cols: 2, rowsA4: 8, widthMm: 105, heightMm: 37, gapXMm: 0 },
+  { id: 'a4-14', cols: 2, rowsA4: 7, widthMm: 105, heightMm: 42.3, gapXMm: 0 },
+  { id: 'a4-12', cols: 2, rowsA4: 6, widthMm: 105, heightMm: 48, gapXMm: 0 },
+  { id: 'a4-8', cols: 2, rowsA4: 4, widthMm: 105, heightMm: 74, gapXMm: 0 },
+  { id: 'a4-4', cols: 2, rowsA4: 2, widthMm: 105, heightMm: 148.5, gapXMm: 0 },
+]
+
+export const DEFAULT_FORMAT_ID = 'a4-24'
+
+export function findFormat(id: string | null | undefined): LabelFormat {
+  return LABEL_FORMATS.find((format) => format.id === id) ?? LABEL_FORMATS.find((f) => f.id === DEFAULT_FORMAT_ID)!
+}
+
+/** Лист к печати: бумага, сетка и положение этикеток (мм) */
 export type SheetLayout = {
+  /** Набор для ключа подготовленной печати: формат, бумага, линии разреза */
   id: string
+  format: LabelFormat
   paper: PaperSize
-  kind: SheetKind
   cols: number
   rows: number
   widthMm: number
   heightMm: number
   gapXMm: number
   gapYMm: number
-  /**
-   * Отступ сетки сверху (мм). Для половины листа — как у верхней половины A4; нижнюю половину кладут
-   * линией разреза вниз — тогда сетка та же. Не задан — поровну сверху и снизу.
-   */
-  topMm?: number
-}
-
-const sheet = (layout: Omit<SheetLayout, 'gapXMm' | 'gapYMm'> & Partial<SheetLayout>): SheetLayout => ({
-  gapXMm: 0,
-  gapYMm: 0,
-  ...layout,
-})
-
-/** Типовые листы самоклеящихся этикеток A4 (Lomond, Avery, Office), их половины и листы без разметки */
-export const SHEET_LAYOUTS: SheetLayout[] = [
-  sheet({ id: 'a4-65', paper: 'A4', kind: 'labels', cols: 5, rows: 13, widthMm: 38.1, heightMm: 21.2, gapXMm: 2.5 }),
-  sheet({ id: 'a4-40', paper: 'A4', kind: 'labels', cols: 4, rows: 10, widthMm: 48.5, heightMm: 25.4 }),
-  sheet({ id: 'a4-24', paper: 'A4', kind: 'labels', cols: 3, rows: 8, widthMm: 70, heightMm: 37 }),
-  sheet({ id: 'a4-21', paper: 'A4', kind: 'labels', cols: 3, rows: 7, widthMm: 70, heightMm: 42.3 }),
-  sheet({ id: 'a4-16', paper: 'A4', kind: 'labels', cols: 2, rows: 8, widthMm: 105, heightMm: 37 }),
-  sheet({ id: 'a4-14', paper: 'A4', kind: 'labels', cols: 2, rows: 7, widthMm: 105, heightMm: 42.3 }),
-  sheet({ id: 'a4-12', paper: 'A4', kind: 'labels', cols: 2, rows: 6, widthMm: 105, heightMm: 48 }),
-  sheet({ id: 'a4-8', paper: 'A4', kind: 'labels', cols: 2, rows: 4, widthMm: 105, heightMm: 74 }),
-  sheet({ id: 'a4-4', paper: 'A4', kind: 'labels', cols: 2, rows: 2, widthMm: 105, heightMm: 148.5 }),
-  sheet({
-    id: 'plain-18',
-    paper: 'A4',
-    kind: 'plain',
-    cols: 3,
-    rows: 6,
-    widthMm: 60,
-    heightMm: 40,
-    gapXMm: 5,
-    gapYMm: 5,
-  }),
-  // Половинки: только листы с чётным числом рядов — разрез ровно между рядами (148,5 мм)
-  sheet({ id: 'a5-half-20', paper: 'A5', kind: 'half', cols: 4, rows: 5, widthMm: 48.5, heightMm: 25.4, topMm: 21.5 }),
-  sheet({ id: 'a5-half-12', paper: 'A5', kind: 'half', cols: 3, rows: 4, widthMm: 70, heightMm: 37, topMm: 0.5 }),
-  sheet({ id: 'a5-half-8', paper: 'A5', kind: 'half', cols: 2, rows: 4, widthMm: 105, heightMm: 37, topMm: 0.5 }),
-  sheet({ id: 'a5-half-6', paper: 'A5', kind: 'half', cols: 2, rows: 3, widthMm: 105, heightMm: 48, topMm: 4.5 }),
-  sheet({ id: 'a5-half-4', paper: 'A5', kind: 'half', cols: 2, rows: 2, widthMm: 105, heightMm: 74, topMm: 0.5 }),
-  sheet({ id: 'a5-half-2', paper: 'A5', kind: 'half', cols: 2, rows: 1, widthMm: 105, heightMm: 148.5, topMm: 0 }),
-  sheet({
-    id: 'a5-plain-8',
-    paper: 'A5',
-    kind: 'plain',
-    cols: 2,
-    rows: 4,
-    widthMm: 60,
-    heightMm: 40,
-    gapXMm: 5,
-    gapYMm: 5,
-  }),
-  sheet({
-    id: 'a5-plain-4',
-    paper: 'A5',
-    kind: 'plain',
-    cols: 2,
-    rows: 2,
-    widthMm: 65,
-    heightMm: 95,
-    gapXMm: 5,
-    gapYMm: 5,
-  }),
-]
-
-export const DEFAULT_SHEET_ID = 'plain-18'
-const DEFAULT_FOR_PAPER: Record<PaperSize, string> = { A4: 'plain-18', A5: 'a5-half-12' }
-
-export function findSheet(id: string | null | undefined): SheetLayout {
-  return (
-    SHEET_LAYOUTS.find((layout) => layout.id === id) ?? SHEET_LAYOUTS.find((layout) => layout.id === DEFAULT_SHEET_ID)!
-  )
+  /** Отступ сетки сверху — как у листа A4, чтобы этикетки попали в прорези */
+  topMm: number
+  /** Пунктир по краям меток — для бумаги без прорезей, которую режут ножницами */
+  cutLines: boolean
 }
 
 /**
- * Раскладка для другого формата: лист этикеток A4 ↔ его половина (24 ↔ 12), без разметки ↔ без разметки;
- * если соответствия нет — стандартная для формата.
+ * Лист выбранного формата на бумаге A4 или A5. На A5 — ряды верхней половины листа A4 (те же отступы);
+ * нижнюю половину кладут линией разреза вниз, тогда её прорези совпадают.
  */
-export function sheetForPaper(current: SheetLayout, paper: PaperSize): SheetLayout {
-  if (current.paper === paper) return current
-  const count = labelsPerSheet(current)
-  const match =
-    current.kind === 'labels'
-      ? SHEET_LAYOUTS.find((layout) => layout.kind === 'half' && labelsPerSheet(layout) * 2 === count)
-      : current.kind === 'half'
-        ? SHEET_LAYOUTS.find((layout) => layout.kind === 'labels' && labelsPerSheet(layout) === count * 2)
-        : SHEET_LAYOUTS.find((layout) => layout.kind === 'plain' && layout.paper === paper)
-  return match ?? findSheet(DEFAULT_FOR_PAPER[paper])
+export function sheetLayout(format: LabelFormat, paper: PaperSize, cutLines: boolean): SheetLayout {
+  const topMm = (A4_PAGE.heightMm - format.rowsA4 * format.heightMm) / 2
+  const rows =
+    paper === 'A4' ? format.rowsA4 : Math.floor((A5_PAGE.heightMm - topMm) / format.heightMm + 1e-6)
+  return {
+    id: `${format.id}-${paper}${cutLines ? '-cut' : ''}`,
+    format,
+    paper,
+    cols: format.cols,
+    rows,
+    widthMm: format.widthMm,
+    heightMm: format.heightMm,
+    gapXMm: format.gapXMm,
+    gapYMm: 0,
+    topMm,
+    cutLines,
+  }
 }
 
 export function labelsPerSheet(layout: SheetLayout): number {
   return layout.cols * layout.rows
 }
 
-/** Пунктир по краям меток — для листов без разметки, которые режут ножницами */
 export function hasCutLines(layout: SheetLayout): boolean {
-  return layout.kind === 'plain'
+  return layout.cutLines
 }
 
 const mm = (value: number) => String(value).replace('.', ',')
 
-/** «24 этикетки на листе · 3 × 8, 70 × 37 мм» */
-export function sheetLabel(layout: SheetLayout): string {
-  const count = labelsPerSheet(layout)
-  const word =
-    count % 10 === 1 && count % 100 !== 11
-      ? 'этикетка'
-      : [2, 3, 4].includes(count % 10) && ![12, 13, 14].includes(count % 100)
-        ? 'этикетки'
-        : 'этикеток'
-  const base = `${count} ${word} · ${layout.cols} × ${layout.rows}, ${mm(layout.widthMm)} × ${mm(layout.heightMm)} мм`
-  if (layout.kind === 'half') return `${base} — половина листа A4 на ${count * 2}`
-  if (layout.kind === 'plain') return `${base}, разрезать по пунктиру`
-  return base
+export function labelWord(count: number): string {
+  if (count % 10 === 1 && count % 100 !== 11) return 'этикетка'
+  if ([2, 3, 4].includes(count % 10) && ![12, 13, 14].includes(count % 100)) return 'этикетки'
+  return 'этикеток'
 }
 
-/** Размер страницы: половина A4 — 210 × 148,5 мм (лежит горизонтально) */
+/** «70 × 37 мм» */
+export function formatSize(format: LabelFormat): string {
+  return `${mm(format.widthMm)} × ${mm(format.heightMm)} мм`
+}
+
+/** «12 этикеток 70 × 37 мм на листе A5 (3 × 4)» */
+export function sheetLabel(layout: SheetLayout): string {
+  const count = labelsPerSheet(layout)
+  return `${count} ${labelWord(count)} ${formatSize(layout.format)} на листе ${layout.paper} (${layout.cols} × ${layout.rows})`
+}
+
 export function sheetPaper(layout: SheetLayout): { widthMm: number; heightMm: number } {
-  if (layout.kind === 'half') return { widthMm: 210, heightMm: 148.5 }
-  return layout.paper === 'A4' ? { widthMm: 210, heightMm: 297 } : { widthMm: 148, heightMm: 210 }
+  return layout.paper === 'A4' ? A4_PAGE : A5_PAGE
 }
 
 /** Этикетка на листе: номер метки и положение (мм от левого верхнего угла страницы) */
@@ -167,7 +129,6 @@ export function sheetPages(layout: SheetLayout, count: number): SheetCell[][] {
   const perPage = layout.cols * layout.rows
   const paper = sheetPaper(layout)
   const left = (paper.widthMm - layout.cols * layout.widthMm - (layout.cols - 1) * layout.gapXMm) / 2
-  const top = layout.topMm ?? (paper.heightMm - layout.rows * layout.heightMm - (layout.rows - 1) * layout.gapYMm) / 2
   const pages: SheetCell[][] = []
   for (let start = 0; start < count; start += perPage) {
     const cells: SheetCell[] = []
@@ -178,7 +139,7 @@ export function sheetPages(layout: SheetLayout, count: number): SheetCell[][] {
       cells.push({
         index,
         x: left + column * (layout.widthMm + layout.gapXMm),
-        y: top + row * (layout.heightMm + layout.gapYMm),
+        y: layout.topMm + row * (layout.heightMm + layout.gapYMm),
         w: layout.widthMm,
         h: layout.heightMm,
       })

@@ -9,19 +9,20 @@ import { canHoldFreeLabels } from '../data/repository'
 import { renderLabelDataUrl, renderLabelPng, safeFileName, shareFiles, shareLabelImages } from '../data/labelImage'
 import { LABEL_DOTS_PER_MM, renderLabelsPdf } from '../data/labelPdf'
 import {
-  DEFAULT_SHEET_ID,
+  DEFAULT_FORMAT_ID,
+  LABEL_FORMATS,
   PAPER_OPTIONS,
-  SHEET_KIND_TITLE,
-  SHEET_LAYOUTS,
   TAPE_LABEL,
   TEXT_PLACEMENT_OPTIONS,
-  findSheet,
+  findFormat,
+  formatSize,
   hasCutLines,
   labelsPerSheet,
-  sheetForPaper,
   sheetLabel,
+  sheetLayout,
   sheetPages,
   sheetPaper,
+  type PaperSize,
   type TextPlacement,
 } from '../data/labelSheets'
 import { DEFAULT_PRINTER_ID, PRINTERS, findPrinter, sizeLabel, type LabelSize } from '../data/printers'
@@ -30,8 +31,32 @@ import type { Place } from '../types'
 const FREE_LABEL_COUNTS = [6, 12, 24]
 const PRINTER_KEY = 'keepit-printer'
 const SIZE_KEY = 'keepit-label-size'
-const SHEET_KEY = 'keepit-a4-sheet'
+/** Прежний выбор листа (до единых размеров) — для переноса настройки */
+const LEGACY_SHEET_KEY = 'keepit-a4-sheet'
+const FORMAT_KEY = 'keepit-label-format'
+const PAPER_KEY = 'keepit-label-paper'
+const CUT_KEY = 'keepit-label-cut'
 const PLACEMENT_KEY = 'keepit-label-text'
+
+/** Размер этикетки, бумага и линии разреза: сохранённые или перенесённые из прежнего выбора листа */
+function initialSheetChoice(): { formatId: string; paper: PaperSize; cutLines: boolean } {
+  const stored = readStored(FORMAT_KEY)
+  if (stored) {
+    return {
+      formatId: findFormat(stored).id,
+      paper: readStored(PAPER_KEY) === 'A5' ? 'A5' : 'A4',
+      cutLines: readStored(CUT_KEY) !== '0',
+    }
+  }
+  const legacy = readStored(LEGACY_SHEET_KEY) ?? ''
+  if (legacy.startsWith('a4-')) return { formatId: findFormat(legacy).id, paper: 'A4', cutLines: false }
+  const half = /^a5-half-(\d+)$/.exec(legacy)?.[1]
+  if (half) {
+    const format = LABEL_FORMATS.find((entry) => entry.cols * entry.rowsA4 === Number(half) * 2)
+    return { formatId: format?.id ?? DEFAULT_FORMAT_ID, paper: 'A5', cutLines: false }
+  }
+  return { formatId: DEFAULT_FORMAT_ID, paper: legacy.startsWith('a5-') ? 'A5' : 'A4', cutLines: true }
+}
 
 /** Готовые к печати страницы: картинки меток с положением в мм — та же раскладка, что в PDF */
 type PrintJob = {
@@ -129,7 +154,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
   const [singleId, setSingleId] = useState(startId)
   const [printerId, setPrinterId] = useState(() => findPrinter(readStored(PRINTER_KEY) ?? DEFAULT_PRINTER_ID).id)
   const [sizeIndex, setSizeIndex] = useState(() => Number(readStored(SIZE_KEY) ?? 0) || 0)
-  const [sheetId, setSheetId] = useState(() => findSheet(readStored(SHEET_KEY) ?? DEFAULT_SHEET_ID).id)
+  const [sheetChoice, setSheetChoice] = useState(initialSheetChoice)
   const [placement, setPlacement] = useState<TextPlacement>(() =>
     readStored(PLACEMENT_KEY) === 'below' ? 'below' : 'right',
   )
@@ -153,7 +178,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
   const isAirPrint = printer.method !== 'image'
   /** Печать через системное окно браузера (компьютер); на iPhone — через PDF и «Поделиться» */
   const directPrint = isAirPrint && !PRINT_VIA_SHARE
-  const sheet = findSheet(sheetId)
+  const sheet = sheetLayout(findFormat(sheetChoice.formatId), sheetChoice.paper, sheetChoice.cutLines)
 
   const objectKey = start?.objectKey
   const objectPlaces = state.places.filter((place) => place.objectKey === objectKey)
@@ -373,11 +398,14 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     writeStored(SIZE_KEY, '0')
   }
 
-  function chooseSheet(id: string) {
-    setSheetId(id)
+  function chooseSheet(patch: Partial<{ formatId: string; paper: PaperSize; cutLines: boolean }>) {
+    const next = { ...sheetChoice, ...patch }
+    setSheetChoice(next)
     setPdf(null)
     setMessage(null)
-    writeStored(SHEET_KEY, id)
+    writeStored(FORMAT_KEY, next.formatId)
+    writeStored(PAPER_KEY, next.paper)
+    writeStored(CUT_KEY, next.cutLines ? '1' : '0')
   }
 
   function choosePlacement(next: TextPlacement) {
@@ -606,42 +634,47 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
                     type="button"
                     className={sheet.paper === option.value ? undefined : 'secondary'}
                     aria-pressed={sheet.paper === option.value}
-                    onClick={() => chooseSheet(sheetForPaper(sheet, option.value).id)}
+                    onClick={() => chooseSheet({ paper: option.value })}
                   >
-                    {option.label}
+                    {option.label} · {option.hint}
                   </button>
                 ))}
               </div>
             </div>
             <div className="stack-tight">
-              <span className="field-caption">Этикеток на листе</span>
-              {(['labels', 'half', 'plain'] as const).map((kind) => {
-                const layouts = SHEET_LAYOUTS.filter((layout) => layout.paper === sheet.paper && layout.kind === kind)
-                if (layouts.length === 0) return null
-                return (
-                  <div key={kind} className="stack-tight sheet-group">
-                    <span className="muted">{SHEET_KIND_TITLE[kind]}</span>
-                    <div className="chip-row">
-                      {layouts.map((layout) => (
-                        <button
-                          key={layout.id}
-                          type="button"
-                          className={`suggest-chip sheet-chip${layout.id === sheet.id ? '' : ' neutral'}`}
-                          aria-pressed={layout.id === sheet.id}
-                          onClick={() => chooseSheet(layout.id)}
-                        >
-                          {labelsPerSheet(layout)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )
-              })}
+              <span className="field-caption">Размер этикетки — как на листе с прорезями, одинаковый для A4 и A5</span>
+              <div className="chip-row">
+                {LABEL_FORMATS.map((format) => {
+                  const layout = sheetLayout(format, sheet.paper, sheet.cutLines)
+                  const selected = format.id === sheet.format.id
+                  return (
+                    <button
+                      key={format.id}
+                      type="button"
+                      className={`suggest-chip sheet-chip${selected ? '' : ' neutral'}`}
+                      aria-pressed={selected}
+                      onClick={() => chooseSheet({ formatId: format.id })}
+                    >
+                      <strong>{formatSize(format)}</strong>
+                      <span className="sheet-chip-count">{labelsPerSheet(layout)} на листе</span>
+                    </button>
+                  )
+                })}
+              </div>
               <span className="muted">{sheetLabel(sheet)}</span>
-              {sheet.kind === 'half' ? (
+              <label className="check-row">
+                <input
+                  type="checkbox"
+                  checked={sheet.cutLines}
+                  onChange={(event) => chooseSheet({ cutLines: event.target.checked })}
+                />
+                <span>Бумага без прорезей — напечатать линии разреза</span>
+              </label>
+              {sheet.paper === 'A5' ? (
                 <span className="muted">
-                  Лист этикеток A4 разрежьте поперёк пополам. Половинку кладите в лоток как A5 — линией разреза вниз
-                  страницы. Сначала напечатайте пробу на обычной бумаге и приложите к листу на просвет.
+                  A5 — половина листа A4: лист этикеток разрежьте поперёк пополам и кладите половинку в лоток как A5,
+                  линией разреза вниз страницы. Сначала напечатайте пробу на обычной бумаге и приложите к листу на
+                  просвет.
                 </span>
               ) : null}
             </div>

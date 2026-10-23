@@ -1074,11 +1074,22 @@ html[data-theme='dark'] .scan-feedback.fail {
   color: #f3a07c;
 }
 
-.sheet-chip {
+.suggest-chip.sheet-chip {
+  display: inline-flex;
+  align-items: center;
   min-width: 48px;
   min-height: 36px;
+  flex-direction: column;
   justify-content: center;
-  font-weight: 600;
+  gap: 0;
+  line-height: 1.2;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.sheet-chip-count {
+  font-size: 0.85em;
+  opacity: 0.8;
 }
 
 .sheet-chip[aria-pressed='true'] {
