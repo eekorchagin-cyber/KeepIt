@@ -14,8 +14,12 @@ import {
   PAPER_OPTIONS,
   TAPE_LABEL,
   TEXT_PLACEMENT_OPTIONS,
+  LABEL_COUNTS,
   findFormat,
+  formatBrands,
   formatSize,
+  formatsWithCount,
+  labelsPerA4,
   hasCutLines,
   labelsPerSheet,
   sheetLabel,
@@ -53,7 +57,7 @@ function initialSheetChoice(): { formatId: string; paper: PaperSize; cutLines: b
   if (legacy.startsWith('a4-')) return { formatId: findFormat(legacy).id, paper: 'A4', cutLines: false }
   const half = /^a5-half-(\d+)$/.exec(legacy)?.[1]
   if (half) {
-    const format = LABEL_FORMATS.find((entry) => entry.cols * entry.rowsA4 === Number(half) * 2)
+    const format = LABEL_FORMATS.find((entry) => labelsPerA4(entry) === Number(half) * 2)
     return { formatId: format?.id ?? DEFAULT_FORMAT_ID, paper: 'A5', cutLines: false }
   }
   return { formatId: DEFAULT_FORMAT_ID, paper: legacy.startsWith('a5-') ? 'A5' : 'A4', cutLines: true }
@@ -403,6 +407,10 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
 
   function chooseSheet(patch: Partial<{ formatId: string; paper: PaperSize; cutLines: boolean }>) {
     const next = { ...sheetChoice, ...patch }
+    // Этикетка на весь лист A4 на A5 не помещается — берём половину листа
+    if (labelsPerSheet(sheetLayout(findFormat(next.formatId), next.paper, next.cutLines)) === 0) {
+      next.formatId = '210x148-2'
+    }
     setSheetChoice(next)
     setPdf(null)
     setMessage(null)
@@ -437,7 +445,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
   const canCreateFree = Boolean(freeParent && canHoldFreeLabels(freeParent.type))
   /** Сколько этикеток останется пустыми на последнем листе A4 — их удобно занять свободными метками */
   const sheetRemainder =
-    printer.method === 'airprint-a4' && printList.length > 0
+    printer.method === 'airprint-a4' && printList.length > 0 && sheet.cols * sheet.rows > 0
       ? (sheet.cols * sheet.rows - (printList.length % (sheet.cols * sheet.rows))) % (sheet.cols * sheet.rows)
       : 0
   const freeCountOptions = [
@@ -650,26 +658,53 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
               </div>
             </div>
             <div className="stack-tight">
-              <span className="field-caption">Размер этикетки — как на листе с прорезями, одинаковый для A4 и A5</span>
+              <span className="field-caption">
+                Этикеток на листе A4 — StickWell, Rillprint, Mega Label, Index Label, Apli
+                {sheet.paper === 'A5' ? ' (на A5 — половина)' : ''}
+              </span>
               <div className="chip-row">
-                {LABEL_FORMATS.map((format) => {
-                  const layout = sheetLayout(format, sheet.paper, sheet.cutLines)
-                  const selected = format.id === sheet.format.id
+                {LABEL_COUNTS.map((count) => {
+                  const options = formatsWithCount(count).filter(
+                    (format) => labelsPerSheet(sheetLayout(format, sheet.paper, sheet.cutLines)) > 0,
+                  )
+                  if (options.length === 0) return null
+                  const selected = labelsPerA4(sheet.format) === count
                   return (
                     <button
-                      key={format.id}
+                      key={count}
                       type="button"
                       className={`suggest-chip sheet-chip${selected ? '' : ' neutral'}`}
                       aria-pressed={selected}
-                      onClick={() => chooseSheet({ formatId: format.id })}
+                      onClick={() => chooseSheet({ formatId: options[0]!.id })}
                     >
-                      <strong>{formatSize(format)}</strong>
-                      <span className="sheet-chip-count">{labelsPerSheet(layout)} на листе</span>
+                      {count}
                     </button>
                   )
                 })}
               </div>
+              {formatsWithCount(labelsPerA4(sheet.format)).length > 1 ? (
+                <>
+                  <span className="field-caption">Размер этикетки</span>
+                  <div className="chip-row">
+                    {formatsWithCount(labelsPerA4(sheet.format)).map((format) => {
+                      const selected = format.id === sheet.format.id
+                      return (
+                        <button
+                          key={format.id}
+                          type="button"
+                          className={`suggest-chip sheet-chip${selected ? '' : ' neutral'}`}
+                          aria-pressed={selected}
+                          onClick={() => chooseSheet({ formatId: format.id })}
+                        >
+                          {formatSize(format)}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </>
+              ) : null}
               <span className="muted">{sheetLabel(sheet)}</span>
+              <span className="muted">Такие листы: {formatBrands(sheet.format)}</span>
               <label className="check-row">
                 <input
                   type="checkbox"
