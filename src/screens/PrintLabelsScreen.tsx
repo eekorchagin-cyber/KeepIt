@@ -37,6 +37,7 @@ const FORMAT_KEY = 'keepit-label-format'
 const PAPER_KEY = 'keepit-label-paper'
 const CUT_KEY = 'keepit-label-cut'
 const PLACEMENT_KEY = 'keepit-label-text'
+const TRAY_KEY = 'keepit-printer-tray'
 
 /** Размер этикетки, бумага и линии разреза: сохранённые или перенесённые из прежнего выбора листа */
 function initialSheetChoice(): { formatId: string; paper: PaperSize; cutLines: boolean } {
@@ -155,6 +156,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
   const [printerId, setPrinterId] = useState(() => findPrinter(readStored(PRINTER_KEY) ?? DEFAULT_PRINTER_ID).id)
   const [sizeIndex, setSizeIndex] = useState(() => Number(readStored(SIZE_KEY) ?? 0) || 0)
   const [sheetChoice, setSheetChoice] = useState(initialSheetChoice)
+  const [trayId, setTrayId] = useState(() => readStored(TRAY_KEY) ?? '1')
   const [placement, setPlacement] = useState<TextPlacement>(() =>
     readStored(PLACEMENT_KEY) === 'below' ? 'below' : 'right',
   )
@@ -179,6 +181,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
   /** Печать через системное окно браузера (компьютер); на iPhone — через PDF и «Поделиться» */
   const directPrint = isAirPrint && !PRINT_VIA_SHARE
   const sheet = sheetLayout(findFormat(sheetChoice.formatId), sheetChoice.paper, sheetChoice.cutLines)
+  const tray = printer.trays?.find((entry) => entry.id === trayId) ?? printer.trays?.[0]
 
   const objectKey = start?.objectKey
   const objectPlaces = state.places.filter((place) => place.objectKey === objectKey)
@@ -406,6 +409,11 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     writeStored(FORMAT_KEY, next.formatId)
     writeStored(PAPER_KEY, next.paper)
     writeStored(CUT_KEY, next.cutLines ? '1' : '0')
+  }
+
+  function chooseTray(id: string) {
+    setTrayId(id)
+    writeStored(TRAY_KEY, id)
   }
 
   function choosePlacement(next: TextPlacement) {
@@ -678,6 +686,36 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
                 </span>
               ) : null}
             </div>
+            {tray ? (
+              <div className="stack-tight">
+                <span className="field-caption">Лоток принтера</span>
+                <div className="split-row">
+                  {printer.trays!.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={option.id === tray.id ? undefined : 'secondary'}
+                      aria-pressed={option.id === tray.id}
+                      onClick={() => chooseTray(option.id)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <span className="muted">Лоток {tray.label}: {tray.hint}.</span>
+                {!tray.labels && !sheet.cutLines ? (
+                  <p className="place-type-warning">
+                    Листы этикеток этот принтер подаёт только из лотка 1 (верхнего). Выберите лоток 1 — или печатайте
+                    на обычной бумаге с линиями разреза.
+                  </p>
+                ) : null}
+                <span className="muted">
+                  {PRINT_VIA_SHARE
+                    ? `На iPhone лоток в окне печати не выбирается — принтер берёт бумагу из лотка, где лежит лист нужного формата. Чтобы печать пошла из лотка ${tray.id}, на время печати ${tray.id === '1' ? 'выдвиньте нижний лоток 2' : 'уберите бумагу из верхнего лотка 1'}.`
+                    : `KeepIt не выбирает лоток сам. В окне печати Chrome нажмите «Печать с помощью системного диалогового окна» (⌥⌘P), затем «Подробнее» → «Подача бумаги» → «Лоток ${tray.id}»${tray.labels && !sheet.cutLines ? ', а в «Носитель и качество» → «Тип носителя» — «Этикетки»' : ''}. В Safari системное окно открывается сразу.`}
+                </span>
+              </div>
+            ) : null}
           </>
         ) : null}
         <div className="stack-tight">
@@ -703,6 +741,13 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
             <li key={step}>{step}</li>
           ))}
         </ol>
+
+        {printer.trays ? (
+          <p className="place-type-warning print-tray-hint">
+            В вашем принтере печать на самоклеящейся бумаге производится из верхнего лотка. Настройте тип бумаги в нём
+            через меню принтера и выдвиньте на время нижний лоток.
+          </p>
+        ) : null}
 
         <button
           type="button"
