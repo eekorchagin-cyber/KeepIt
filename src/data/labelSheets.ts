@@ -36,6 +36,7 @@ export const LABEL_FORMATS: LabelFormat[] = [
   { id: 'a4-40', cols: 4, rowsA4: 10, widthMm: 48.5, heightMm: 25.4, gapXMm: 0 },
   { id: 'a4-24', cols: 3, rowsA4: 8, widthMm: 70, heightMm: 37, gapXMm: 0 },
   { id: 'a4-21', cols: 3, rowsA4: 7, widthMm: 70, heightMm: 42.3, gapXMm: 0 },
+  { id: 'a4-18', cols: 3, rowsA4: 6, widthMm: 66.7, heightMm: 46, gapXMm: 0 },
   { id: 'a4-16', cols: 2, rowsA4: 8, widthMm: 105, heightMm: 37, gapXMm: 0 },
   { id: 'a4-14', cols: 2, rowsA4: 7, widthMm: 105, heightMm: 42.3, gapXMm: 0 },
   { id: 'a4-12', cols: 2, rowsA4: 6, widthMm: 105, heightMm: 48, gapXMm: 0 },
