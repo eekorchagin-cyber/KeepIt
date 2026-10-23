@@ -9,13 +9,13 @@ import { canHoldFreeLabels } from '../data/repository'
 import { renderLabelDataUrl, renderLabelPng, safeFileName, shareFiles, shareLabelImages } from '../data/labelImage'
 import { LABEL_DOTS_PER_MM, renderLabelsPdf } from '../data/labelPdf'
 import {
-  A4,
-  A4_LAYOUTS,
   DEFAULT_SHEET_ID,
+  SHEET_LAYOUTS,
   TAPE_LABEL,
   TEXT_PLACEMENT_OPTIONS,
   findSheet,
   sheetPages,
+  sheetPaper,
   type TextPlacement,
 } from '../data/labelSheets'
 import { DEFAULT_PRINTER_ID, PRINTERS, findPrinter, sizeLabel, type LabelSize } from '../data/printers'
@@ -272,8 +272,8 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     }
     return {
       key,
-      pageWidthMm: A4.widthMm,
-      pageHeightMm: A4.heightMm,
+      pageWidthMm: sheetPaper(sheet).widthMm,
+      pageHeightMm: sheetPaper(sheet).heightMm,
       cutLines: sheet.cutLines,
       pages: sheetPages(sheet, list.length).map((cells) =>
         cells.map((cell) => ({
@@ -591,11 +591,16 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
         ) : null}
         {printer.method === 'airprint-a4' ? (
           <label className="field">
-            Лист этикеток A4
+            Лист: A4 или A5
             <ChoiceSelect
-              title="Лист этикеток A4"
+              title="Лист: A4 или A5"
               value={sheet.id}
-              options={A4_LAYOUTS.map((layout) => ({ value: layout.id, label: layout.label, hint: layout.hint }))}
+              options={SHEET_LAYOUTS.map((layout) => ({
+                value: layout.id,
+                label: layout.label,
+                hint: layout.hint,
+                group: layout.cutLines ? 'Обычная бумага' : 'Самоклеящиеся листы A4',
+              }))}
               onChange={chooseSheet}
             />
           </label>

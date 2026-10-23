@@ -10,6 +10,8 @@ import { FreeLabelsGroup } from '../components/FreeLabelsGroup'
 import { ChoiceSelect } from '../components/ChoiceSelect'
 import { PLACE_TYPES, PLACE_TYPE_LABEL, PLACE_TYPE_SHORT, canNest } from '../data/placeTypes'
 import { PlaceTypeIcon } from '../components/PlaceTypeIcon'
+import { AssignedCodes } from '../components/AssignedCodes'
+import { placeUrl } from '../data/placeCodes'
 import type { Place } from '../types'
 
 /**
@@ -259,6 +261,22 @@ export function PlaceScreen({ state, placeId }: { state: KeepItState; placeId: s
           </p>
         ) : null}
         {typeError ? <p className="error">{typeError}</p> : null}
+        {isUnusedFreeLabel(place) ? (
+          <div className="place-banner stack-tight free-label-banner">
+            <strong>Это свободная метка</strong>
+            <span className="muted">
+              Новая коробка — переименуйте её через «···». Наклеили метку на уже существующую вещь или место —
+              присвойте её им.
+            </span>
+            <button
+              type="button"
+              onClick={() => state.navigate({ name: 'assign-code', code: placeUrl(place.id) })}
+            >
+              Присвоить существующей вещи или месту
+            </button>
+          </div>
+        ) : null}
+        <AssignedCodes state={state} target={{ kind: 'place', id: place.id }} codes={place.extraCodes} />
         {duplicates > 0 ? (
           <button
             type="button"

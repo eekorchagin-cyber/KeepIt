@@ -18,6 +18,7 @@ import {
   looksLikeLegacyShortCode,
   placePathNames,
   recomputePlaceCodes,
+  scanKey,
 } from './placeCodes'
 import { defaultObjectAppearance, type ObjectIconId } from './icons'
 import { PLACE_TYPE_LABEL, canNest, nestError } from './placeTypes'
@@ -526,6 +527,74 @@ export async function changePlaceType(placeId: string, type: PlaceType): Promise
   const next: Place = { ...place, type, version: place.version + 1, updatedAt: nowIso(), syncStatus: 'pending' }
   await db.places.put(next)
   return next
+}
+
+export type CodeTarget = { kind: 'place' | 'item'; id: string }
+
+function withoutCode<T extends { extraCodes?: string[]; version: number }>(entry: T, key: string, at: string): T {
+  return {
+    ...entry,
+    extraCodes: (entry.extraCodes ?? []).filter((code) => code !== key),
+    version: entry.version + 1,
+    updatedAt: at,
+    syncStatus: 'pending',
+  }
+}
+
+/**
+ * Присвоить отсканированный код вещи или месту: потом его скан открывает выбранное.
+ * У кода один владелец — у прежнего он снимается. Свободная метка (пустая заготовка) после присвоения
+ * удаляется: её QR теперь ведёт на выбранную вещь или место.
+ */
+export async function assignScanCode(raw: string, target: CodeTarget): Promise<void> {
+  const key = scanKey(raw)
+  if (!key) throw new Error('Пустой код')
+  const at = nowIso()
+  await db.transaction('rw', [db.places, db.items], async () => {
+    if (key.startsWith('place:')) {
+      const own = await db.places.get(key.slice('place:'.length))
+      if (own) {
+        const contents =
+          (await db.places.where('parentId').equals(own.id).count()) +
+          (await db.items.where('placeId').equals(own.id).count())
+        if (!isUnusedFreeLabel(own) || contents > 0) {
+          throw new Error(`Это метка места «${own.name}» — она уже открывает его.`)
+        }
+        await db.places.delete(own.id)
+      }
+    }
+    if (key.startsWith('item:')) {
+      const own = await db.items.get(key.slice('item:'.length))
+      if (own) throw new Error(`Это метка вещи «${own.name}» — она уже открывает её карточку.`)
+    }
+
+    const placeOwners = await db.places.filter((place) => place.extraCodes?.includes(key) ?? false).toArray()
+    for (const place of placeOwners) await db.places.put(withoutCode(place, key, at))
+    const itemOwners = await db.items.filter((item) => item.extraCodes?.includes(key) ?? false).toArray()
+    for (const item of itemOwners) await db.items.put(withoutCode(item, key, at))
+
+    if (target.kind === 'place') {
+      const place = await db.places.get(target.id)
+      if (!place) throw new Error('Место не найдено')
+      await db.places.put({ ...withoutCode(place, key, at), extraCodes: [...(place.extraCodes ?? []), key] })
+    } else {
+      const item = await db.items.get(target.id)
+      if (!item) throw new Error('Вещь не найдена')
+      await db.items.put({ ...withoutCode(item, key, at), extraCodes: [...(item.extraCodes ?? []), key] })
+    }
+  })
+}
+
+/** Отвязать присвоенный код: его скан снова станет незнакомым */
+export async function unassignScanCode(target: CodeTarget, key: string): Promise<void> {
+  const at = nowIso()
+  if (target.kind === 'place') {
+    const place = await db.places.get(target.id)
+    if (place) await db.places.put(withoutCode(place, key, at))
+  } else {
+    const item = await db.items.get(target.id)
+    if (item) await db.items.put(withoutCode(item, key, at))
+  }
 }
 
 export async function renamePlace(placeId: string, name: string): Promise<Place> {

@@ -13,6 +13,9 @@ import {
   applyImportPlan,
   applyInventory,
   changePlaceType,
+  assignScanCode,
+  unassignScanCode,
+  type CodeTarget,
   type InventoryApply,
   assignCategory,
   convertItemToPlace,
@@ -118,6 +121,8 @@ function fallbackParent(screen: Screen, places: Place[]): Screen {
       return { name: 'home' }
     case 'releases':
       return { name: 'about' }
+    case 'assign-code':
+      return { name: 'scan' }
   }
 }
 
@@ -125,7 +130,10 @@ export type KeepItState = {
   loading: boolean
   settings: AppSettings | null
   places: Place[]
+  /** Вещи активного объекта */
   items: Item[]
+  /** Вещи всех объектов */
+  allItems: Item[]
   categories: CategoryNode[]
   /** Справочник названий вещей */
   itemNames: ItemName[]
@@ -174,6 +182,9 @@ export type KeepItState = {
   relocatePlace: (placeId: string, parentId: string) => Promise<Place>
   /** Сменить тип места (например, «Коробка» → «Полка / ящик») с проверкой вложенности */
   changeType: (placeId: string, type: PlaceType) => Promise<Place>
+  /** Присвоить отсканированный код (свободная метка, чужой QR, штрихкод) вещи или месту */
+  assignCode: (raw: string, target: CodeTarget) => Promise<void>
+  unassignCode: (target: CodeTarget, key: string) => Promise<void>
   removePlace: (placeId: string) => Promise<void>
   createItem: (input: {
     placeId: string
@@ -454,6 +465,7 @@ export function useKeepIt(): KeepItState {
     settings,
     places,
     items: visibleItems,
+    allItems: items,
     categories,
     itemNames,
     screen,
@@ -531,6 +543,17 @@ export function useKeepIt(): KeepItState {
       const place = await renamePlace(placeId, name)
       await refresh()
       return place
+    },
+    assignCode: async (raw, target) => {
+      try {
+        await assignScanCode(raw, target)
+      } finally {
+        await refresh()
+      }
+    },
+    unassignCode: async (target, key) => {
+      await unassignScanCode(target, key)
+      await refresh()
     },
     changeType: async (placeId, type) => {
       try {

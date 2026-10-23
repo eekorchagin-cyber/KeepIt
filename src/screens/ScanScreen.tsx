@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeepItState } from '../hooks/useKeepIt'
-import { parseItemIdFromScan, parsePlaceFromScan } from '../data/placeCodes'
+import { findItemByScan, parseItemIdFromScan, parsePlaceFromScan } from '../data/placeCodes'
 import { getQrDetector } from '../data/qrDetector'
 import { playScanSound } from '../data/scanSound'
 
@@ -18,6 +18,8 @@ export function ScanScreen({ state }: { state: KeepItState }) {
   stateRef.current = state
   const [manual, setManual] = useState('')
   const [message, setMessage] = useState<string | null>(null)
+  /** Незнакомый код — можно присвоить вещи или месту */
+  const [unknown, setUnknown] = useState<string | null>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
 
   function releaseCamera() {
@@ -33,17 +35,13 @@ export function ScanScreen({ state }: { state: KeepItState }) {
   /** true — код принят и камера закрыта; false — показали причину, сканирование продолжается */
   async function openPlace(raw: string): Promise<boolean> {
     const current = stateRef.current
+    const value = raw.trim()
+    if (!value) return false
     // Данные из памяти, без чтения базы: сигнал звучит сразу после распознавания
     const allPlaces = current.places
-    // Метка вещи — открываем её карточку
-    const itemId = parseItemIdFromScan(raw)
-    if (itemId) {
-      const item = current.findItem(itemId)
-      if (!item) {
-        playScanSound('fail')
-        setMessage('Вещь по этой метке не найдена — возможно, она удалена.')
-        return false
-      }
+    // Метка вещи или присвоенный вещи код — открываем её карточку
+    const item = findItemByScan(value, current.allItems)
+    if (item) {
       playScanSound('ok')
       releaseCamera()
       const itemPlace = allPlaces.find((entry) => entry.id === item.placeId)
@@ -53,10 +51,15 @@ export function ScanScreen({ state }: { state: KeepItState }) {
       current.navigate({ name: 'item', itemId: item.id })
       return true
     }
-    const place = parsePlaceFromScan(raw, allPlaces)
+    const place = parsePlaceFromScan(value, allPlaces)
     if (!place) {
       playScanSound('fail')
-      setMessage('Место не найдено. Проверьте код или выбранный объект хранения.')
+      setUnknown(value)
+      setMessage(
+        parseItemIdFromScan(value)
+          ? 'Вещь по этой метке не найдена — возможно, она удалена. Метку можно присвоить другой вещи или месту.'
+          : 'Этот код KeepIt не знаком. Его можно присвоить вещи или месту — потом его скан будет открывать их.',
+      )
       return false
     }
     playScanSound('ok')
@@ -146,6 +149,12 @@ export function ScanScreen({ state }: { state: KeepItState }) {
         <strong>Сканировать место</strong>
         <video ref={videoRef} className="scanner-video" muted playsInline />
         {cameraError ? <p className="muted">{cameraError}</p> : null}
+        {message ? <p className="scan-feedback fail">{message}</p> : null}
+        {unknown ? (
+          <button type="button" onClick={() => state.navigate({ name: 'assign-code', code: unknown })}>
+            Присвоить код вещи или месту
+          </button>
+        ) : null}
       </div>
 
       <div className="panel stack">
@@ -158,7 +167,6 @@ export function ScanScreen({ state }: { state: KeepItState }) {
             placeholder="Дача / Каменный гараж / … или ссылка QR"
           />
         </label>
-        {message ? <p className="error">{message}</p> : null}
         <button type="button" onClick={() => void openPlace(manual)} disabled={!manual.trim()}>
           Открыть место
         </button>

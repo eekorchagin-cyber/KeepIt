@@ -62,7 +62,41 @@ export function parseItemIdFromScan(raw: string): string | null {
   return match?.[1] ?? null
 }
 
+/**
+ * Ключ отсканированного кода для «Присвоить код»: метка места — «place:<id>», метка вещи — «item:<id>»,
+ * любой другой QR или штрихкод — сам его текст.
+ */
+export function scanKey(raw: string): string {
+  const value = raw.trim()
+  const itemId = parseItemIdFromScan(value)
+  if (itemId) return `item:${itemId.toLowerCase()}`
+  const placeId = value.match(/#\/place\/([0-9a-f-]{36})/i)?.[1]
+  if (placeId) return `place:${placeId.toLowerCase()}`
+  return value
+}
+
+function hasCode(entry: { extraCodes?: string[] }, key: string): boolean {
+  return Boolean(key && entry.extraCodes?.includes(key))
+}
+
+/** Вещь по её метке или по присвоенному ей коду */
+export function findItemByScan<T extends { id: string; extraCodes?: string[] }>(raw: string, items: T[]): T | null {
+  const itemId = parseItemIdFromScan(raw)
+  const own = itemId ? items.find((item) => item.id === itemId) : undefined
+  if (own) return own
+  const key = scanKey(raw)
+  return items.find((item) => hasCode(item, key)) ?? null
+}
+
+/** Место по его метке, коду-пути или по присвоенному ему коду */
 export function parsePlaceFromScan(raw: string, places: Place[]): Place | null {
+  const own = ownPlaceFromScan(raw, places)
+  if (own) return own
+  const key = scanKey(raw)
+  return places.find((place) => hasCode(place, key)) ?? null
+}
+
+function ownPlaceFromScan(raw: string, places: Place[]): Place | null {
   // Метка вещи — не место (иначе UUID вещи искался бы среди мест)
   if (parseItemIdFromScan(raw)) return null
   const value = raw.trim()

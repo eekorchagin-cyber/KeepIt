@@ -4,7 +4,7 @@ import { ModeCategory } from '../components/ModeCategory'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { movesWithContents, normalizeSearch } from '../data/repository'
 import { canNest, nestError } from '../data/placeTypes'
-import { parseItemIdFromScan, parsePlaceFromScan } from '../data/placeCodes'
+import { findItemByScan, parseItemIdFromScan, parsePlaceFromScan } from '../data/placeCodes'
 import { MoveQrScan, type RawScanResult } from '../components/MoveItemSheet'
 import { formatQty } from '../data/units'
 import { PlaceTypeIcon } from '../components/PlaceTypeIcon'
@@ -140,10 +140,11 @@ export function GatherItemsScreen({ state, placeId }: { state: KeepItState; plac
     if (!place) return { ok: false, text: 'Место не найдено' }
     setError(null)
     setMessage(null)
-    const itemId = parseItemIdFromScan(raw)
-    if (itemId) {
-      const item = state.findItem(itemId)
-      if (!item) return { ok: false, text: 'Вещь по этой метке не найдена — возможно, она удалена.' }
+    const item = findItemByScan(raw, state.allItems)
+    if (!item && parseItemIdFromScan(raw)) {
+      return { ok: false, text: 'Вещь по этой метке не найдена — возможно, она удалена.' }
+    }
+    if (item) {
       if (item.placeId === place.id) return { ok: false, text: `«${item.name}» уже лежит здесь.` }
       if (selectedItems.has(item.id)) return { ok: false, text: `«${item.name}» уже в списке к переносу.` }
       setSelectedItems((current) => new Set(current).add(item.id))
@@ -151,7 +152,9 @@ export function GatherItemsScreen({ state, placeId }: { state: KeepItState; plac
     }
     const scanned = parsePlaceFromScan(raw, state.places)
     const reject = (text: string): RawScanResult => ({ ok: false, text })
-    if (!scanned) return reject('QR не распознан: это не метка KeepIt или место удалено.')
+    if (!scanned) {
+      return reject('Код не знаком KeepIt. Присвоить его вещи или месту можно в сканере на главном экране.')
+    }
     if (scanned.id === place.id) {
       return reject('Это метка этого же места — отсканируйте коробку или вещь, которую нужно перенести.')
     }

@@ -4,6 +4,7 @@ import { ChoiceSelect } from '../components/ChoiceSelect'
 import { ModeCategory } from '../components/ModeCategory'
 import { ServicePanel } from '../components/ServicePanel'
 import { ItemQrPanel } from '../components/ItemQrPanel'
+import { AssignedCodes } from '../components/AssignedCodes'
 import { MoveItemSheet } from '../components/MoveItemSheet'
 import { formatLentDate, isItemLent } from '../data/repository'
 import type { KeepItState } from '../hooks/useKeepIt'
@@ -268,6 +269,11 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
 
       <ServicePanel key={item.id} state={state} item={item} />
       <ItemQrPanel key={`qr-${item.id}`} state={state} item={item} />
+      {item.extraCodes?.length ? (
+        <div className="panel">
+          <AssignedCodes state={state} target={{ kind: 'item', id: item.id }} codes={item.extraCodes} />
+        </div>
+      ) : null}
 
       {!item.needsFill ? (
         <div className="panel stack">

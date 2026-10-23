@@ -54,6 +54,8 @@ export type Screen =
   | { name: 'settings' }
   | { name: 'about' }
   | { name: 'releases' }
+  /** Присвоить отсканированный код вещи или месту */
+  | { name: 'assign-code'; code: string }
   | { name: 'more' }
 
 export type Place = {
@@ -72,6 +74,8 @@ export type Place = {
   archived: boolean
   /** Дата последней инвентаризации (YYYY-MM-DD); пусто — не проводилась */
   inventoriedAt?: string
+  /** Присвоенные коды: свободные метки, чужие QR и штрихкоды (ключи scanKey) */
+  extraCodes?: string[]
   visibility: 'shared' | 'personal'
   version: number
   updatedAt: string
@@ -103,6 +107,8 @@ export type Item = {
   serviceNextAt?: string
   /** Интервал ТО в месяцах; 0 — следующая дата задаётся вручную */
   serviceIntervalMonths?: number
+  /** Присвоенные коды: свободные метки, чужие QR и штрихкоды (ключи scanKey) */
+  extraCodes?: string[]
   visibility: 'shared' | 'personal'
   version: number
   updatedAt: string

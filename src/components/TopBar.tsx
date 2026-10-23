@@ -36,6 +36,7 @@ function titleFor(state: KeepItState): string {
   if (screen.name === 'settings') return 'Настройки'
   if (screen.name === 'about') return 'О программе'
   if (screen.name === 'releases') return 'История обновлений'
+  if (screen.name === 'assign-code') return 'Присвоить код'
   if (screen.name === 'more') return 'Ещё'
   return 'KeepIt'
 }

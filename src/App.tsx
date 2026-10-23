@@ -7,6 +7,7 @@ import { useLongPressHints, type LongPressHint } from './hooks/useLongPressHints
 import { useServiceReminders } from './hooks/useServiceReminders'
 import { AboutScreen } from './screens/AboutScreen'
 import { AddItemScreen } from './screens/AddItemScreen'
+import { AssignCodeScreen } from './screens/AssignCodeScreen'
 import { CategoriesScreen } from './screens/CategoriesScreen'
 import { CategorizeScreen } from './screens/CategorizeScreen'
 import { ImportListScreen } from './screens/ImportListScreen'
@@ -115,6 +116,9 @@ export default function App() {
           <AboutScreen update={update} onShowHistory={() => state.navigate({ name: 'releases' })} />
         ) : null}
         {state.screen.name === 'releases' ? <ReleaseHistoryScreen /> : null}
+        {state.screen.name === 'assign-code' ? (
+          <AssignCodeScreen key={state.screen.code} state={state} code={state.screen.code} />
+        ) : null}
         {state.screen.name === 'lent' ? <LentItemsScreen state={state} /> : null}
         {state.screen.name === 'categories' ? <CategoriesScreen state={state} /> : null}
         {state.screen.name === 'more' ? <MoreScreen state={state} /> : null}

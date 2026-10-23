@@ -1074,6 +1074,23 @@ html[data-theme='dark'] .scan-feedback.fail {
   color: #f3a07c;
 }
 
+.assign-code-value {
+  overflow-wrap: anywhere;
+}
+
+.free-label-banner {
+  cursor: default;
+}
+
+.free-label-banner button {
+  justify-self: start;
+}
+
+.assigned-codes-toggle {
+  justify-self: start;
+  padding-left: 0;
+}
+
 .release-entry p {
   margin: 0;
 }
