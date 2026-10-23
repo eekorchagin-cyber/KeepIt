@@ -12,6 +12,7 @@ import { PLACE_TYPES, PLACE_TYPE_LABEL, PLACE_TYPE_SHORT, canNest } from '../dat
 import { PlaceTypeIcon } from '../components/PlaceTypeIcon'
 import { AssignedCodes } from '../components/AssignedCodes'
 import { placeUrl } from '../data/placeCodes'
+import { requestAddPlace } from '../data/uiEvents'
 import type { Place } from '../types'
 
 /**
@@ -225,6 +226,7 @@ export function PlaceScreen({ state, placeId }: { state: KeepItState; placeId: s
 
   const parentPlace = place.parentId ? state.findPlace(place.parentId) : undefined
   const misplacedIn = parentPlace && !canNest(parentPlace.type, place.type) ? parentPlace : null
+  const isEmpty = children.length === 0 && items.length === 0
 
   return (
     <div className="stack">
@@ -298,6 +300,24 @@ export function PlaceScreen({ state, placeId }: { state: KeepItState; placeId: s
           </button>
         ) : null}
       </div>
+
+      {isEmpty && !isUnusedFreeLabel(place) ? (
+        <div className="panel stack empty-place">
+          <strong>Здесь пока пусто</strong>
+          <span className="muted">
+            Добавьте вещь или место хранения — коробку, полку, стеллаж. То, что уже есть в KeepIt, можно перенести
+            сюда значком «Перенести сюда» выше.
+          </span>
+          <div className="split-row">
+            <button type="button" onClick={() => state.navigate({ name: 'add-item', placeId })}>
+              Добавить вещь
+            </button>
+            <button type="button" className="secondary" onClick={requestAddPlace}>
+              Добавить место
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <PlaceSearch key={placeId} state={state} place={place}>
         {children.length > 0 ? <NestedPlaces key={placeId} state={state} places={children} /> : null}

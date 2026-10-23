@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { onAddPlaceRequest } from '../data/uiEvents'
 import { ChoiceSelect } from './ChoiceSelect'
 import { DataExchange } from './DataExchange'
 import { MoveItemSheet, MovePlaceSheet } from './MoveItemSheet'
@@ -80,6 +81,20 @@ export function TopBar({ state }: { state: KeepItState }) {
     setActionError(null)
     setSheet(next)
   }
+
+  // «Добавить место» с экрана пустого места
+  const screenName = state.screen.name
+  useEffect(
+    () =>
+      onAddPlaceRequest(() => {
+        setPlaceName('')
+        setPlaceType(screenName === 'object' ? 'room' : 'box')
+        setHint(null)
+        setActionError(null)
+        setSheet('add-place')
+      }),
+    [screenName],
+  )
 
   function closeSheet() {
     setSheet(null)
