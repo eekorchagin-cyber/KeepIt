@@ -87,7 +87,14 @@ export default function App() {
           <ObjectScreen state={state} objectKey={state.screen.objectKey} />
         ) : null}
         {state.screen.name === 'place' ? <PlaceScreen state={state} placeId={state.screen.placeId} /> : null}
-        {state.screen.name === 'add-item' ? <AddItemScreen state={state} placeId={state.screen.placeId} /> : null}
+        {state.screen.name === 'add-item' ? (
+          <AddItemScreen
+            key={state.screen.code ?? 'plain'}
+            state={state}
+            placeId={state.screen.placeId}
+            code={state.screen.code}
+          />
+        ) : null}
         {state.screen.name === 'import-list' ? (
           <ImportListScreen state={state} placeId={state.screen.placeId} />
         ) : null}

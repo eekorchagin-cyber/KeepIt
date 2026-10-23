@@ -140,6 +140,43 @@ export function MovePlaceSheet({
   )
 }
 
+/** Выбрать место (без переноса): для новой вещи или нового места */
+export function ChoosePlaceSheet({
+  state,
+  title,
+  subjectLabel,
+  currentPlaceId,
+  targetError,
+  onChoose,
+  onClose,
+}: {
+  state: KeepItState
+  title: string
+  subjectLabel: string
+  currentPlaceId: string | null
+  targetError?: (target: Place) => string | null
+  onChoose: (placeId: string) => void
+  onClose: () => void
+}) {
+  return (
+    <PlaceTargetSheet
+      state={state}
+      title={title}
+      subjectLabel={subjectLabel}
+      currentPlaceId={currentPlaceId}
+      blockedIds={new Set()}
+      targetError={targetError}
+      confirmLabel={(place) => `Выбрать: ${place.name}`}
+      alreadyHereLabel="Уже выбрано"
+      onConfirm={async (placeId) => {
+        onChoose(placeId)
+        onClose()
+      }}
+      onClose={onClose}
+    />
+  )
+}
+
 function PlaceTargetSheet({
   state,
   title,

@@ -142,6 +142,8 @@ export type KeepItState = {
   cameBack: boolean
   /** Последнее открытое место хранения (текущее или ближайшее в истории «←») — для печати меток из «Ещё» */
   recentPlaceId: string | null
+  /** Экран, с которого открыли текущий (для «←»); null — открыт первым */
+  previousScreen: Screen | null
   error: string | null
   canGoBack: boolean
   refresh: () => Promise<void>
@@ -471,6 +473,7 @@ export function useKeepIt(): KeepItState {
     screen,
     cameBack,
     recentPlaceId,
+    previousScreen: history[history.length - 1] ?? null,
     error,
     canGoBack,
     refresh,

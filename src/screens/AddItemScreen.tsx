@@ -6,7 +6,10 @@ import type { KeepItState } from '../hooks/useKeepIt'
 import { findName } from '../data/itemNames'
 import { normalizeSearch } from '../data/repository'
 import { unitForMode, unitOptionsFor } from '../data/units'
-import type { AccountingMode, UnitCode } from '../types'
+import { ChoosePlaceSheet } from '../components/MoveItemSheet'
+import { PlaceTypeIcon } from '../components/PlaceTypeIcon'
+import { PLACE_TYPES, canNest } from '../data/placeTypes'
+import type { AccountingMode, PlaceType, UnitCode } from '../types'
 
 /** После выбора подсказки список исчезает — «click» того же касания не должен попасть в поле под пальцем */
 function swallowNextClick() {
@@ -19,8 +22,15 @@ function swallowNextClick() {
   window.setTimeout(() => document.removeEventListener('click', stop, true), 600)
 }
 
-export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId: string }) {
-  const place = state.findPlace(placeId)
+export function AddItemScreen({ state, placeId, code }: { state: KeepItState; placeId: string; code?: string }) {
+  const [targetPlaceId, setTargetPlaceId] = useState(placeId)
+  const place = state.findPlace(targetPlaceId)
+  /** Незнакомый отсканированный код: присваивается первой сохранённой вещи или новому месту */
+  const [pendingCode, setPendingCode] = useState(code ?? null)
+  const [kind, setKind] = useState<'item' | 'place'>('item')
+  const [choosingPlace, setChoosingPlace] = useState(false)
+  const placeTypes = place ? PLACE_TYPES.filter((option) => canNest(place.type, option.value)) : []
+  const [placeType, setPlaceType] = useState<PlaceType>('box')
   const [name, setName] = useState('')
   const [mode, setMode] = useState<AccountingMode>('durable')
   const [category, setCategory] = useState('')
@@ -99,8 +109,8 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
       if (mode === 'durable' && (!Number.isInteger(qty) || qty < 1)) {
         throw new Error('Для постоянного хранения укажите целое число от 1')
       }
-      await state.createItem({
-        placeId,
+      const item = await state.createItem({
+        placeId: targetPlaceId,
         name,
         mode,
         category,
@@ -109,6 +119,10 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
         quantity: qty,
         note,
       })
+      if (pendingCode) {
+        await state.assignCode(pendingCode, { kind: 'item', id: item.id })
+        setPendingCode(null)
+      }
       if (andAnother) {
         setName('')
         setNote('')
@@ -124,110 +138,214 @@ export function AddItemScreen({ state, placeId }: { state: KeepItState; placeId:
     }
   }
 
+  /** Новое место хранения (коробка, полка…) с отсканированным кодом — внутри выбранного места */
+  async function savePlace() {
+    if (!place || !pendingCode) return
+    setBusy(true)
+    setError(null)
+    try {
+      if (!name.trim()) throw new Error('Укажите название')
+      const type = placeTypes.some((option) => option.value === placeType) ? placeType : placeTypes[0]?.value
+      if (!type) throw new Error(`В «${place.name}» нельзя создать место — выберите другое`)
+      const created = await state.createChildPlace(place.id, name.trim(), type)
+      await state.assignCode(pendingCode, { kind: 'place', id: created.id })
+      state.replaceScreen({ name: 'place', placeId: created.id })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const placePath = state
+    .pathFor(place.id)
+    .map((part) => part.name)
+    .join(' / ')
+  const shownCode = pendingCode && pendingCode.length > 80 ? `${pendingCode.slice(0, 80)}…` : pendingCode
+
   return (
     <div className="stack">
-      <div className="panel stack">
-        <p className="muted">Место: {place.name}</p>
-
-        <label className="field">
-          Название
-          <input
-            className="name-input"
-            value={name}
-            onChange={(e) => {
-              setTypingName(true)
-              onNameChange(e.target.value)
-            }}
-            onBlur={() => setTypingName(false)}
-            placeholder="Дрель"
-            autoComplete="off"
-          />
-        </label>
-        {suggestions.length > 0 ? (
-          <div className="name-suggest" role="listbox" aria-label="Названия из каталога">
-            {suggestions.map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                className="name-suggest-row"
-                role="option"
-                aria-selected={false}
-                // Выбор — в момент касания: на iPhone поле теряет фокус раньше «click», и список исчезает до выбора
-                onPointerDown={(e) => {
-                  e.preventDefault()
-                  swallowNextClick()
-                  pickSuggestion(entry.name)
-                }}
-                onClick={() => pickSuggestion(entry.name)}
-              >
-                <span className="name-suggest-name">{entry.name}</span>
-                {entry.category ? (
-                  <span className="muted">
-                    Категория: {entry.subcategory ? `${entry.category} / ${entry.subcategory}` : entry.category}
-                  </span>
-                ) : null}
-                {whereStored(entry.name) ? <span className="muted">Уже есть: {whereStored(entry.name)}</span> : null}
-              </button>
-            ))}
+      {pendingCode ? (
+        <div className="panel stack-tight">
+          <span className="muted">Отсканирован новый код</span>
+          <strong className="assign-code-value">{shownCode}</strong>
+          <span className="muted">
+            Он будет присвоен {kind === 'item' ? 'новой вещи' : 'новому месту хранения'} — потом его скан откроет{' '}
+            {kind === 'item' ? 'её карточку' : 'это место'}.
+          </span>
+          <div className="split-row">
+            <button type="button" className={kind === 'item' ? undefined : 'secondary'} onClick={() => setKind('item')}>
+              Вещь
+            </button>
+            <button
+              type="button"
+              className={kind === 'place' ? undefined : 'secondary'}
+              onClick={() => setKind('place')}
+            >
+              Место хранения
+            </button>
           </div>
-        ) : null}
+          <button
+            type="button"
+            className="ghost assigned-codes-toggle"
+            onClick={() => state.replaceScreen({ name: 'assign-code', code: pendingCode })}
+          >
+            Это уже есть в KeepIt — присвоить код существующей вещи или месту
+          </button>
+        </div>
+      ) : null}
 
-        <label className="field">
-          Режим учёта
-          <ChoiceSelect
-            title="Режим учёта"
-            value={mode}
-            options={MODE_OPTIONS}
-            onChange={(next) => {
-              setMode(next)
-              setUnit((current) => unitForMode(next, current))
-              setQuantity(next === 'durable' ? '1' : '0')
-            }}
-          />
-        </label>
-
-        <CategoryPicker
-          tree={state.categories}
-          category={category}
-          subcategory={subcategory}
-          onChange={({ category: nextCategory, subcategory: nextSub }) => {
-            setCategory(nextCategory)
-            setSubcategory(nextSub)
-          }}
+      {choosingPlace ? (
+        <ChoosePlaceSheet
+          state={state}
+          title={kind === 'item' ? 'Где лежит новая вещь' : 'Где будет новое место'}
+          subjectLabel={name.trim() ? `«${name.trim()}»` : kind === 'item' ? 'Новая вещь' : 'Новое место'}
+          currentPlaceId={targetPlaceId}
+          onChoose={setTargetPlaceId}
+          onClose={() => setChoosingPlace(false)}
         />
+      ) : null}
 
-        <div className="row">
-          <label className="field grow">
-            Количество
-            <input
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-              inputMode={mode === 'durable' ? 'numeric' : 'decimal'}
-              placeholder={mode === 'durable' ? '2' : '0'}
+      {kind === 'place' && pendingCode ? (
+        <div className="panel stack">
+          <div className="row">
+            <p className="muted grow">Внутри: {placePath}</p>
+            <button type="button" className="ghost" onClick={() => setChoosingPlace(true)}>
+              Изменить
+            </button>
+          </div>
+          <label className="field">
+            Название
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Коробка с инструментом" />
+          </label>
+          <label className="field">
+            Тип места
+            <ChoiceSelect<PlaceType>
+              title="Тип места"
+              value={
+                placeTypes.some((option) => option.value === placeType) ? placeType : (placeTypes[0]?.value ?? 'box')
+              }
+              options={placeTypes.map((option) => ({
+                ...option,
+                icon: <PlaceTypeIcon type={option.value} decorative />,
+              }))}
+              onChange={setPlaceType}
             />
           </label>
-          <label className="field" style={{ width: 110 }}>
-            Ед.
-            <ChoiceSelect title="Единица" value={unit} options={unitOptionsFor(mode)} onChange={setUnit} />
+          {error ? <p className="error">{error}</p> : null}
+          <button type="button" disabled={busy} onClick={() => void savePlace()}>
+            Сохранить место
+          </button>
+        </div>
+      ) : (
+        <div className="panel stack">
+          <div className="row">
+            <p className="muted grow">Место: {placePath}</p>
+            <button type="button" className="ghost" onClick={() => setChoosingPlace(true)}>
+              Изменить
+            </button>
+          </div>
+
+          <label className="field">
+            Название
+            <input
+              className="name-input"
+              value={name}
+              onChange={(e) => {
+                setTypingName(true)
+                onNameChange(e.target.value)
+              }}
+              onBlur={() => setTypingName(false)}
+              placeholder="Дрель"
+              autoComplete="off"
+            />
           </label>
+          {suggestions.length > 0 ? (
+            <div className="name-suggest" role="listbox" aria-label="Названия из каталога">
+              {suggestions.map((entry) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  className="name-suggest-row"
+                  role="option"
+                  aria-selected={false}
+                  // Выбор — в момент касания: на iPhone поле теряет фокус раньше «click», и список исчезает до выбора
+                  onPointerDown={(e) => {
+                    e.preventDefault()
+                    swallowNextClick()
+                    pickSuggestion(entry.name)
+                  }}
+                  onClick={() => pickSuggestion(entry.name)}
+                >
+                  <span className="name-suggest-name">{entry.name}</span>
+                  {entry.category ? (
+                    <span className="muted">
+                      Категория: {entry.subcategory ? `${entry.category} / ${entry.subcategory}` : entry.category}
+                    </span>
+                  ) : null}
+                  {whereStored(entry.name) ? <span className="muted">Уже есть: {whereStored(entry.name)}</span> : null}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          <label className="field">
+            Режим учёта
+            <ChoiceSelect
+              title="Режим учёта"
+              value={mode}
+              options={MODE_OPTIONS}
+              onChange={(next) => {
+                setMode(next)
+                setUnit((current) => unitForMode(next, current))
+                setQuantity(next === 'durable' ? '1' : '0')
+              }}
+            />
+          </label>
+
+          <CategoryPicker
+            tree={state.categories}
+            category={category}
+            subcategory={subcategory}
+            onChange={({ category: nextCategory, subcategory: nextSub }) => {
+              setCategory(nextCategory)
+              setSubcategory(nextSub)
+            }}
+          />
+
+          <div className="row">
+            <label className="field grow">
+              Количество
+              <input
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                inputMode={mode === 'durable' ? 'numeric' : 'decimal'}
+                placeholder={mode === 'durable' ? '2' : '0'}
+              />
+            </label>
+            <label className="field" style={{ width: 110 }}>
+              Ед.
+              <ChoiceSelect title="Единица" value={unit} options={unitOptionsFor(mode)} onChange={setUnit} />
+            </label>
+          </div>
+
+          <label className="field">
+            Примечание
+            <textarea value={note} onChange={(e) => setNote(e.target.value)} />
+          </label>
+
+          {error ? <p className="error">{error}</p> : null}
+
+          <div className="row wrap">
+            <button type="button" disabled={busy} onClick={() => void save(false)}>
+              Сохранить
+            </button>
+            <button type="button" className="secondary" disabled={busy} onClick={() => void save(true)}>
+              Сохранить и ещё
+            </button>
+          </div>
         </div>
-
-        <label className="field">
-          Примечание
-          <textarea value={note} onChange={(e) => setNote(e.target.value)} />
-        </label>
-
-        {error ? <p className="error">{error}</p> : null}
-
-        <div className="row wrap">
-          <button type="button" disabled={busy} onClick={() => void save(false)}>
-            Сохранить
-          </button>
-          <button type="button" className="secondary" disabled={busy} onClick={() => void save(true)}>
-            Сохранить и ещё
-          </button>
-        </div>
-      </div>
+      )}
     </div>
   )
 }

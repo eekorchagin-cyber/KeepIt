@@ -16,6 +16,16 @@ export function ScanScreen({ state }: { state: KeepItState }) {
   const streamRef = useRef<MediaStream | null>(null)
   const stateRef = useRef(state)
   stateRef.current = state
+  /** Сканер открыт с экрана места или объекта — новая вещь с незнакомым кодом ляжет туда */
+  const [contextPlaceId] = useState<string | null>(() => {
+    const previous = state.previousScreen
+    if (previous?.name === 'place') return state.findPlace(previous.placeId) ? previous.placeId : null
+    if (previous?.name === 'object') {
+      return state.places.find((place) => place.type === 'object' && place.objectKey === previous.objectKey)?.id ?? null
+    }
+    return null
+  })
+  const contextRef = useRef(contextPlaceId)
   const [manual, setManual] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   /** Незнакомый код — можно присвоить вещи или месту */
@@ -52,13 +62,20 @@ export function ScanScreen({ state }: { state: KeepItState }) {
       return true
     }
     const place = parsePlaceFromScan(value, allPlaces)
+    // Незнакомый код, сканер открыт из места: сразу карточка новой вещи в этом месте, код присвоится ей
+    if (!place && contextRef.current && !parseItemIdFromScan(value)) {
+      playScanSound('ok')
+      releaseCamera()
+      current.replaceScreen({ name: 'add-item', placeId: contextRef.current, code: value })
+      return true
+    }
     if (!place) {
       playScanSound('fail')
       setUnknown(value)
       setMessage(
         parseItemIdFromScan(value)
           ? 'Вещь по этой метке не найдена — возможно, она удалена. Метку можно присвоить другой вещи или месту.'
-          : 'Этот код KeepIt не знаком. Его можно присвоить вещи или месту — потом его скан будет открывать их.',
+          : 'Этот код KeepIt не знаком. Заведите новую вещь или место с этим кодом или присвойте его существующей вещи или месту.',
       )
       return false
     }
@@ -147,13 +164,41 @@ export function ScanScreen({ state }: { state: KeepItState }) {
     <div className="stack">
       <div className="panel stack">
         <strong>Сканировать место</strong>
+        {contextPlaceId ? (
+          <span className="muted">
+            Незнакомый код откроет карточку новой вещи в «{state.findPlace(contextPlaceId)?.name}».
+          </span>
+        ) : null}
         <video ref={videoRef} className="scanner-video" muted playsInline />
         {cameraError ? <p className="muted">{cameraError}</p> : null}
         {message ? <p className="scan-feedback fail">{message}</p> : null}
         {unknown ? (
-          <button type="button" onClick={() => state.navigate({ name: 'assign-code', code: unknown })}>
-            Присвоить код вещи или месту
-          </button>
+          <div className="row wrap">
+            <button
+              type="button"
+              onClick={() =>
+                state.navigate({
+                  name: 'add-item',
+                  placeId:
+                    state.recentPlaceId ??
+                    state.places.find(
+                      (place) => place.type === 'object' && place.objectKey === state.settings?.activeObject,
+                    )?.id ??
+                    '',
+                  code: unknown,
+                })
+              }
+            >
+              Новая вещь или место
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => state.navigate({ name: 'assign-code', code: unknown })}
+            >
+              Присвоить существующей
+            </button>
+          </div>
         ) : null}
       </div>
 

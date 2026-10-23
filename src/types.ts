@@ -36,7 +36,8 @@ export type Screen =
   | { name: 'home' }
   | { name: 'object'; objectKey: ObjectKey }
   | { name: 'place'; placeId: string }
-  | { name: 'add-item'; placeId: string }
+  /** code — отсканированный незнакомый код: присвоить новой вещи или новому месту */
+  | { name: 'add-item'; placeId: string; code?: string }
   | { name: 'import-list'; placeId: string }
   | { name: 'gather-items'; placeId: string }
   | { name: 'duplicates'; placeId?: string }
