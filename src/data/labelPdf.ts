@@ -1,5 +1,5 @@
 import { renderLabelJpeg } from './labelImage'
-import { TAPE_LABEL, sheetPages, sheetPaper, type SheetLayout, type TextPlacement } from './labelSheets'
+import { TAPE_LABEL, hasCutLines, sheetPages, sheetPaper, type SheetLayout, type TextPlacement } from './labelSheets'
 import type { PrinterMethod } from './printers'
 
 const PT_PER_MM = 72 / 25.4
@@ -113,7 +113,7 @@ export async function renderLabelsPdf(
   const pages: Page[] = sheetPages(options.sheet, images.length).map((cells) => ({
     ...sheetPaper(options.sheet),
     items: cells.map((cell) => ({ image: cell.index, x: cell.x, y: cell.y, w: cell.w, h: cell.h })),
-    cutLines: options.sheet.cutLines,
+    cutLines: hasCutLines(options.sheet),
   }))
   return buildPdf(images, pages)
 }

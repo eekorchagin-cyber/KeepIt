@@ -10,10 +10,16 @@ import { renderLabelDataUrl, renderLabelPng, safeFileName, shareFiles, shareLabe
 import { LABEL_DOTS_PER_MM, renderLabelsPdf } from '../data/labelPdf'
 import {
   DEFAULT_SHEET_ID,
+  PAPER_OPTIONS,
+  SHEET_KIND_TITLE,
   SHEET_LAYOUTS,
   TAPE_LABEL,
   TEXT_PLACEMENT_OPTIONS,
   findSheet,
+  hasCutLines,
+  labelsPerSheet,
+  sheetForPaper,
+  sheetLabel,
   sheetPages,
   sheetPaper,
   type TextPlacement,
@@ -274,7 +280,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
       key,
       pageWidthMm: sheetPaper(sheet).widthMm,
       pageHeightMm: sheetPaper(sheet).heightMm,
-      cutLines: sheet.cutLines,
+      cutLines: hasCutLines(sheet),
       pages: sheetPages(sheet, list.length).map((cells) =>
         cells.map((cell) => ({
           id: list[cell.index]!.id,
@@ -400,7 +406,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
       : 0
   const freeCountOptions = [
     ...(sheetRemainder > 0
-      ? [{ value: sheetRemainder, label: `${sheetRemainder} — дополнить лист до конца`, hint: sheet.label }]
+      ? [{ value: sheetRemainder, label: `${sheetRemainder} — дополнить лист до конца`, hint: sheetLabel(sheet) }]
       : []),
     ...FREE_LABEL_COUNTS.filter((count) => count !== sheetRemainder).map((count) => ({
       value: count,
@@ -590,20 +596,56 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
           </label>
         ) : null}
         {printer.method === 'airprint-a4' ? (
-          <label className="field">
-            Лист: A4 или A5
-            <ChoiceSelect
-              title="Лист: A4 или A5"
-              value={sheet.id}
-              options={SHEET_LAYOUTS.map((layout) => ({
-                value: layout.id,
-                label: layout.label,
-                hint: layout.hint,
-                group: layout.cutLines ? 'Обычная бумага' : 'Самоклеящиеся листы A4',
-              }))}
-              onChange={chooseSheet}
-            />
-          </label>
+          <>
+            <div className="stack-tight">
+              <span className="field-caption">Формат бумаги</span>
+              <div className="split-row">
+                {PAPER_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={sheet.paper === option.value ? undefined : 'secondary'}
+                    aria-pressed={sheet.paper === option.value}
+                    onClick={() => chooseSheet(sheetForPaper(sheet, option.value).id)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="stack-tight">
+              <span className="field-caption">Этикеток на листе</span>
+              {(['labels', 'half', 'plain'] as const).map((kind) => {
+                const layouts = SHEET_LAYOUTS.filter((layout) => layout.paper === sheet.paper && layout.kind === kind)
+                if (layouts.length === 0) return null
+                return (
+                  <div key={kind} className="stack-tight sheet-group">
+                    <span className="muted">{SHEET_KIND_TITLE[kind]}</span>
+                    <div className="chip-row">
+                      {layouts.map((layout) => (
+                        <button
+                          key={layout.id}
+                          type="button"
+                          className={`suggest-chip sheet-chip${layout.id === sheet.id ? '' : ' neutral'}`}
+                          aria-pressed={layout.id === sheet.id}
+                          onClick={() => chooseSheet(layout.id)}
+                        >
+                          {labelsPerSheet(layout)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+              <span className="muted">{sheetLabel(sheet)}</span>
+              {sheet.kind === 'half' ? (
+                <span className="muted">
+                  Лист этикеток A4 разрежьте поперёк пополам. Половинку кладите в лоток как A5 — линией разреза вниз
+                  страницы. Сначала напечатайте пробу на обычной бумаге и приложите к листу на просвет.
+                </span>
+              ) : null}
+            </div>
+          </>
         ) : null}
         <div className="stack-tight">
           <span className="field-caption">Текст на этикетке</span>

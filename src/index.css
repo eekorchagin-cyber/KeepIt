@@ -1074,6 +1074,23 @@ html[data-theme='dark'] .scan-feedback.fail {
   color: #f3a07c;
 }
 
+.sheet-chip {
+  min-width: 48px;
+  min-height: 36px;
+  justify-content: center;
+  font-weight: 600;
+}
+
+.sheet-chip[aria-pressed='true'] {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.sheet-group {
+  gap: 4px;
+}
+
 .assign-code-value {
   overflow-wrap: anywhere;
 }
