@@ -9,12 +9,49 @@ import type { Item } from '../types'
 type SearchMode = 'name' | 'category'
 
 /** Что искали в последний раз: восстанавливается при возврате из карточки вещи. */
-const lastSearch: { mode: SearchMode; query: string; category: string | null; sub: string; unfilled: boolean } = {
+const lastSearch: {
+  mode: SearchMode
+  query: string
+  category: string | null
+  sub: string
+  unfilled: boolean
+  /** Откуда открыли поиск и где искали (null — везде): «Искать везде» не сбрасывается при возврате */
+  origin: string | null
+  scopeId: string | null
+} = {
   mode: 'name',
   query: '',
   category: null,
   sub: '',
   unfilled: false,
+  origin: null,
+  scopeId: null,
+}
+
+/** Место, с которого открыли поиск: место или объект — ищем в нём и во всём вложенном; иначе — везде */
+function originPlaceId(state: KeepItState): string | null {
+  const previous = state.previousScreen
+  if (previous?.name === 'place') return state.findPlace(previous.placeId) ? previous.placeId : null
+  if (previous?.name === 'object') {
+    return state.places.find((place) => place.type === 'object' && place.objectKey === previous.objectKey)?.id ?? null
+  }
+  return null
+}
+
+/** Место и все вложенные в него на любой глубине */
+function subtreeOf(state: KeepItState, rootId: string): Set<string> {
+  const ids = new Set([rootId])
+  let added = true
+  while (added) {
+    added = false
+    for (const place of state.places) {
+      if (place.parentId && ids.has(place.parentId) && !ids.has(place.id)) {
+        ids.add(place.id)
+        added = true
+      }
+    }
+  }
+  return ids
 }
 
 /** Чего не хватает в карточке: пустая строка — заполнено */
@@ -90,8 +127,26 @@ export function SearchScreen({ state }: { state: KeepItState }) {
     setSubState(next)
   }
 
-  const items = state.items
+  const [origin] = useState(() => originPlaceId(state))
+  const [scopeId, setScopeIdState] = useState<string | null>(() =>
+    lastSearch.origin === origin ? lastSearch.scopeId : origin,
+  )
+  function setScopeId(next: string | null) {
+    lastSearch.origin = origin
+    lastSearch.scopeId = next
+    setScopeIdState(next)
+  }
+  const scopePlace = scopeId ? state.findPlace(scopeId) : undefined
+  const scopeIds = scopePlace ? subtreeOf(state, scopePlace.id) : null
+  // Сверху вниз: из места — по нему и всему вложенному; с главного экрана — по всем объектам
+  const items = scopeIds ? state.allItems.filter((item) => scopeIds.has(item.placeId)) : state.allItems
   const q = normalizeSearch(query)
+  const scopeTitle = scopePlace
+    ? state
+        .pathFor(scopePlace.id)
+        .map((part) => part.name)
+        .join(' / ')
+    : ''
 
   return (
     <div className="stack">
@@ -121,10 +176,24 @@ export function SearchScreen({ state }: { state: KeepItState }) {
           aria-label={mode === 'name' ? 'Поиск по названию' : 'Поиск категории'}
           autoFocus
         />
+        <div className="row search-scope">
+          <span className="grow muted">
+            {scopePlace ? `Ищем в «${scopeTitle}» и во всём, что внутри` : 'Ищем во всех объектах'}
+          </span>
+          {scopePlace ? (
+            <button type="button" className="ghost" onClick={() => setScopeId(null)}>
+              Искать везде
+            </button>
+          ) : origin ? (
+            <button type="button" className="ghost" onClick={() => setScopeId(origin)}>
+              Только в «{state.findPlace(origin)?.name}»
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {mode === 'name' ? (
-        <NameResults state={state} items={items} q={q} />
+        <NameResults state={state} items={items} q={q} scoped={Boolean(scopePlace)} />
       ) : category === null ? (
         <CategoryList items={items} q={q} onPick={setCategory} />
       ) : (
@@ -141,7 +210,18 @@ export function SearchScreen({ state }: { state: KeepItState }) {
   )
 }
 
-function NameResults({ state, items, q }: { state: KeepItState; items: Item[]; q: string }) {
+function NameResults({
+  state,
+  items,
+  q,
+  scoped,
+}: {
+  state: KeepItState
+  items: Item[]
+  q: string
+  /** Ищем в одном месте: совпадения снаружи — ниже, «В других местах» */
+  scoped: boolean
+}) {
   const [onlyUnfilled, setOnlyUnfilledState] = useState(lastSearch.unfilled)
   function setOnlyUnfilled(next: boolean) {
     lastSearch.unfilled = next
@@ -149,15 +229,15 @@ function NameResults({ state, items, q }: { state: KeepItState; items: Item[]; q
   }
   const unfilled = items.filter((item) => missingInfo(item))
   const source = onlyUnfilled ? unfilled : items
-  // По названию ищем во всех объектах: сначала текущий, ниже — остальные (и вещи без места)
-  const activeIds = new Set(items.map((item) => item.id))
+  // Совпадения в выбранном месте — сверху; при поиске в одном месте ниже — найденное в других местах
+  const inScope = new Set(items.map((item) => item.id))
   const matches = q
     ? (onlyUnfilled ? state.allItems.filter((item) => missingInfo(item)) : state.allItems).filter((item) =>
         normalizeSearch(item.name).includes(q),
       )
     : source
-  const results = matches.filter((item) => activeIds.has(item.id))
-  const elsewhere = q ? matches.filter((item) => !activeIds.has(item.id)) : []
+  const results = matches.filter((item) => inScope.has(item.id))
+  const elsewhere = q && scoped ? matches.filter((item) => !inScope.has(item.id)) : []
   return (
     <div className="panel stack">
       <div className="chip-row">
@@ -179,10 +259,12 @@ function NameResults({ state, items, q }: { state: KeepItState; items: Item[]; q
       </span>
       <div className="list">
         {results.length === 0 && elsewhere.length === 0 ? (
-          <p className="muted">{onlyUnfilled && !q ? 'Все карточки заполнены' : 'Ничего не найдено ни в одном объекте'}</p>
+          <p className="muted">
+            {onlyUnfilled && !q ? 'Все карточки заполнены' : scoped ? 'Ничего не найдено' : 'Ничего не найдено ни в одном объекте'}
+          </p>
         ) : null}
         {results.length === 0 && elsewhere.length > 0 ? (
-          <p className="muted">В текущем объекте не найдено — есть в других:</p>
+          <p className="muted">Здесь не найдено — есть в других местах:</p>
         ) : null}
         {results.map((item) => (
           <ItemRow key={item.id} state={state} item={item} />
@@ -190,7 +272,7 @@ function NameResults({ state, items, q }: { state: KeepItState; items: Item[]; q
       </div>
       {elsewhere.length > 0 ? (
         <>
-          {results.length > 0 ? <strong>В других объектах</strong> : null}
+          {results.length > 0 ? <strong>В других местах</strong> : null}
           <div className="list">
             {elsewhere.map((item) => (
               <ItemRow key={item.id} state={state} item={item} />
@@ -225,7 +307,7 @@ function CategoryList({ items, q, onPick }: { items: Item[]; q: string; onPick: 
 
   return (
     <div className="panel stack">
-      <span className="muted">Категории с вещами в активном объекте</span>
+      <span className="muted">Категории с вещами там, где ищем</span>
       <div className="list">
         {list.length === 0 ? <p className="muted">Подходящих категорий нет</p> : null}
         {list.map(([key, group]) => (
