@@ -75,16 +75,14 @@ function toneUrl(kind: Kind, gain: number): string {
   return URL.createObjectURL(new Blob([view.buffer], { type: 'audio/wav' }))
 }
 
-type AudioSessionNavigator = Navigator & { audioSession?: { type: string } }
-
 const isAppleTouch =
   /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.userAgent))
 
 /**
- * Web Audio звучит почти без задержки, но на iPhone без audioSession (iOS до 17) его глушит
- * переключатель «Бесшумно» — там остаётся <audio>.
+ * Web Audio звучит почти без задержки, но на iPhone при включённой камере сканера молчит
+ * (и глушится переключателем «Бесшумно») — там играет <audio>.
  */
-const webAudioUsable = 'audioSession' in navigator || !isAppleTouch
+const webAudioUsable = !isAppleTouch
 
 let context: AudioContext | null = null
 let buffers: Record<Kind, AudioBuffer> | null = null
@@ -95,8 +93,6 @@ function getContext(): AudioContext | null {
   const Ctor =
     window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
   if (!Ctor) return null
-  const session = (navigator as AudioSessionNavigator).audioSession
-  if (session) session.type = 'playback'
   context = new Ctor()
   const toBuffer = (kind: Kind) => {
     const samples = synth(kind)

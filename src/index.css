@@ -669,6 +669,13 @@ html[data-theme='dark'] .icon-btn:disabled {
   align-items: center;
 }
 
+/* Частые нажатия — не «двойное касание для увеличения» на iPhone */
+button,
+input,
+label {
+  touch-action: manipulation;
+}
+
 .qty-btn {
   width: 56px;
   min-height: 56px;

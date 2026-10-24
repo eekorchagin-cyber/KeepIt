@@ -94,7 +94,6 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
     setSubcategory(known.subcategory)
     setMode(known.mode)
     setUnit(unitForMode(known.mode, known.unit))
-    setQuantity(known.mode === 'durable' ? '1' : '0')
   }
 
   async function save(andAnother: boolean) {
@@ -126,7 +125,7 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
       if (andAnother) {
         setName('')
         setNote('')
-        setQuantity(mode === 'durable' ? '1' : '0')
+        setQuantity('1')
       } else {
         // Назад к месту, откуда открыли «+», — экран ввода не остаётся в истории «←»
         state.goBack()
@@ -298,7 +297,6 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
               onChange={(next) => {
                 setMode(next)
                 setUnit((current) => unitForMode(next, current))
-                setQuantity(next === 'durable' ? '1' : '0')
               }}
             />
           </label>
@@ -320,7 +318,7 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 inputMode={mode === 'durable' ? 'numeric' : 'decimal'}
-                placeholder={mode === 'durable' ? '2' : '0'}
+                placeholder="1"
               />
             </label>
             <label className="field" style={{ width: 110 }}>

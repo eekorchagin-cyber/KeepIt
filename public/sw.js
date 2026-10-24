@@ -1,7 +1,10 @@
-// Сервис-воркер KeepIt: только уведомления об обновлениях. Файлы не кэширует,
-// чтобы новая версия всегда приходила с сервера.
+// Сервис-воркер KeepIt: уведомления об обновлениях и запасная копия программы.
+// Страница берётся с сервера (новая версия приходит сразу); если сервер не ответил за несколько секунд
+// или недоступен — открывается сохранённая копия, данные и так хранятся на устройстве.
 
 const META_CACHE = 'keepit-meta'
+const APP_CACHE = 'keepit-app'
+const NAVIGATION_TIMEOUT_MS = 4000
 const CURRENT_KEY = './__current-version'
 const NOTIFIED_KEY = './__notified-version'
 
@@ -67,6 +70,80 @@ self.addEventListener('message', (event) => {
 
 self.addEventListener('periodicsync', (event) => {
   if (event.tag === 'keepit-update-check') event.waitUntil(checkForUpdate())
+})
+
+const APP_SHELL_KEY = new URL('./', self.registration.scope).href
+
+/** Убрать из кэша файлы прежних сборок, на которые новая страница уже не ссылается */
+async function pruneAssets(html) {
+  const cache = await caches.open(APP_CACHE)
+  const used = new Set([...html.matchAll(/assets\/[^"' )]+/g)].map((match) => match[0]))
+  for (const request of await cache.keys()) {
+    const path = new URL(request.url).pathname
+    const asset = path.slice(path.indexOf('assets/'))
+    if (path.includes('/assets/') && !used.has(asset)) await cache.delete(request)
+  }
+}
+
+/** Страница программы: сначала сервер, при задержке или ошибке — сохранённая копия */
+async function navigationResponse(request) {
+  const cache = await caches.open(APP_CACHE)
+  const network = fetch(request).then(async (response) => {
+    if (response.ok) {
+      await cache.put(APP_SHELL_KEY, response.clone())
+      response
+        .clone()
+        .text()
+        .then(pruneAssets)
+        .catch(() => undefined)
+    }
+    return response
+  })
+  const timeout = new Promise((resolve) => setTimeout(() => resolve(null), NAVIGATION_TIMEOUT_MS))
+  try {
+    const fast = await Promise.race([network, timeout])
+    if (fast && fast.ok) return fast
+  } catch {
+    // сервер недоступен — ниже сохранённая копия
+  }
+  const cached = await cache.match(APP_SHELL_KEY)
+  if (cached) return cached
+  return network
+}
+
+/**
+ * Файлы сборки (с хэшем в имени — не меняются) и значки: сразу из кэша, иначе с сервера с сохранением.
+ * Значки без хэша дополнительно тихо обновляются в фоне.
+ */
+async function assetResponse(request, refresh) {
+  const cache = await caches.open(APP_CACHE)
+  const cached = await cache.match(request)
+  const load = () =>
+    fetch(request).then(async (response) => {
+      if (response.ok) await cache.put(request, response.clone())
+      return response
+    })
+  if (!cached) return load()
+  if (refresh) load().catch(() => undefined)
+  return cached
+}
+
+self.addEventListener('fetch', (event) => {
+  const request = event.request
+  if (request.method !== 'GET') return
+  const url = new URL(request.url)
+  if (url.origin !== self.location.origin) return
+  // Номер версии — всегда с сервера, иначе не узнать об обновлении
+  if (url.pathname.endsWith('/version.json')) return
+  if (request.mode === 'navigate') {
+    event.respondWith(navigationResponse(request))
+    return
+  }
+  if (url.pathname.includes('/assets/')) {
+    event.respondWith(assetResponse(request, false))
+  } else if (url.pathname.includes('/icons/')) {
+    event.respondWith(assetResponse(request, true))
+  }
 })
 
 self.addEventListener('notificationclick', (event) => {

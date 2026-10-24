@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ChoiceSelect } from '../components/ChoiceSelect'
 import { ModeCategory } from '../components/ModeCategory'
 import type { KeepItState } from '../hooks/useKeepIt'
-import { movesWithContents, normalizeSearch } from '../data/repository'
+import { normalizeSearch } from '../data/repository'
 import { canNest, nestError } from '../data/placeTypes'
 import { findItemByScan, parseItemIdFromScan, parsePlaceFromScan } from '../data/placeCodes'
 import { MoveQrScan, type RawScanResult } from '../components/MoveItemSheet'
@@ -17,15 +17,12 @@ export function GatherItemsScreen({ state, placeId }: { state: KeepItState; plac
   const ancestors = path.slice(0, -1).reverse()
   const ancestorIds = new Set(ancestors.map((entry) => entry.id))
 
-  /** Коробки/контейнеры переносятся с содержимым, остальные места — только пустыми. */
+  /** Места переносятся вместе с содержимым — по правилам вложенности типов. */
   function movablePlaces(sourceId: string): Place[] {
     return state.childPlaces(sourceId).filter((child) => {
       if (child.id === placeId || ancestorIds.has(child.id)) return false
       // Полку — не в полку, стеллаж — не в стеллаж и т. д.
-      if (place && !canNest(place.type, child.type)) return false
-      if (movesWithContents(child.type)) return true
-      const contents = state.contentsOf(child.id)
-      return contents.places + contents.items === 0
+      return !place || canNest(place.type, child.type)
     })
   }
 
@@ -49,10 +46,10 @@ export function GatherItemsScreen({ state, placeId }: { state: KeepItState; plac
         .sort((a, b) => a.label.localeCompare(b.label, 'ru'))
     : []
 
-  const [sourceId, setSourceId] = useState<string | null>(
-    () =>
-      ancestors.find((entry) => contentCount(entry.id) > 0)?.id ?? ancestors[0]?.id ?? otherPlaces[0]?.id ?? null,
-  )
+  // Место-источник не открыто сразу: иначе весь список родителя (стеллажа, гаража) выглядит как содержимое полки
+  const [sourceId, setSourceId] = useState<string | null>(null)
+  /** Названия только что перенесённого — видно, что именно легло сюда */
+  const [movedNames, setMovedNames] = useState<string[]>([])
   const [query, setQuery] = useState('')
   const [scanning, setScanning] = useState(false)
   const [selectedItems, setSelectedItems] = useState<Set<string>>(() => new Set())
@@ -121,7 +118,8 @@ export function GatherItemsScreen({ state, placeId }: { state: KeepItState; plac
   }
 
   function chooseSource(id: string) {
-    setSourceId(id || null)
+    // Повторное нажатие на то же место — свернуть его список
+    setSourceId((current) => (id && id !== current ? id : null))
     setQuery('')
     setMessage(null)
     setError(null)
@@ -163,10 +161,6 @@ export function GatherItemsScreen({ state, placeId }: { state: KeepItState; plac
     }
     if (scanned.parentId === place.id) return reject(`«${scanned.name}» уже лежит здесь.`)
     if (!canNest(place.type, scanned.type)) return reject(nestError(place.type, scanned.type))
-    const contents = state.contentsOf(scanned.id)
-    if (!movesWithContents(scanned.type) && contents.places + contents.items > 0) {
-      return reject(`«${scanned.name}» не пустое: с содержимым переносятся только коробки и контейнеры.`)
-    }
     if (selectedPlaces.has(scanned.id)) return reject(`«${scanned.name}» уже в списке к переносу.`)
     setSelectedPlaces((current) => new Set(current).add(scanned.id))
     return { ok: true, text: `Добавлено: ${scanned.name}` }
@@ -186,10 +180,13 @@ export function GatherItemsScreen({ state, placeId }: { state: KeepItState; plac
     setError(null)
     setMessage(null)
     try {
+      const names = [...pickedPlaces.map((entry) => entry.name), ...pickedItems.map((item) => item.name)]
       const movedPlaces = placeIds.length ? await state.relocatePlaces(placeIds, place.id) : 0
       const movedItems = itemIds.length ? await state.relocateItems(itemIds, place.id) : 0
       setSelectedItems(new Set())
       setSelectedPlaces(new Set())
+      setMovedNames((current) => [...names, ...current])
+      setSourceId(null)
       const parts = [
         movedPlaces ? `мест: ${movedPlaces}` : '',
         movedItems ? `вещей: ${movedItems}` : '',
@@ -202,11 +199,108 @@ export function GatherItemsScreen({ state, placeId }: { state: KeepItState; plac
     }
   }
 
+  const pickedPanel =
+    selectedCount > 0 ? (
+      <div className="panel stack">
+        <div className="row">
+          <strong className="grow">К переносу: {selectedCount}</strong>
+          <button
+            type="button"
+            className="ghost"
+            disabled={busy}
+            onClick={() => {
+              setSelectedItems(new Set())
+              setSelectedPlaces(new Set())
+            }}
+          >
+            Очистить
+          </button>
+        </div>
+        <div className="list">
+          {pickedPlaces.map((entry) => (
+            <div key={entry.id} className="row gather-picked">
+              <span className="stack-tight grow">
+                <strong>
+                  <PlaceTypeIcon type={entry.type} />
+                  {entry.name}
+                </strong>
+                <span className="muted">из: {entry.parentId ? pathLabel(entry.parentId) : '—'}</span>
+              </span>
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label={`Убрать «${entry.name}» из списка`}
+                onClick={() => unpick(setSelectedPlaces, entry.id)}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          {pickedItems.map((item) => (
+            <div key={item.id} className="row gather-picked">
+              <span className="stack-tight grow">
+                <strong>{item.name}</strong>
+                <span className="muted">
+                  {formatQty(item.quantity, item.unit)} · из: {pathLabel(item.placeId)}
+                </span>
+              </span>
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label={`Убрать «${item.name}» из списка`}
+                onClick={() => unpick(setSelectedItems, item.id)}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    ) : null
+
   return (
     <div className="stack">
       <div className="panel stack">
         <strong>Перенести в «{place.name}»</strong>
-        <p className="muted">Откуда взять вещи и коробки:</p>
+        <button
+          type="button"
+          className={scanning ? 'secondary' : undefined}
+          onClick={() => setScanning((current) => !current)}
+        >
+          {scanning ? 'Закрыть сканер' : 'Сканировать QR коробки или вещи'}
+        </button>
+        {scanning ? (
+          <MoveQrScan
+            busy={busy}
+            continuous
+            hint="Сканируйте метки коробок, мест и вещей подряд — каждая добавится в список «К переносу» ниже"
+            actionLabel="Добавить по коду"
+            manualPlaceholder="Код или путь коробки"
+            onResolved={() => undefined}
+            onRawScan={onScanned}
+            onFail={() => undefined}
+          />
+        ) : null}
+      </div>
+
+      {pickedPanel}
+
+      {movedNames.length > 0 ? (
+        <div className="panel stack-tight">
+          <strong>Перенесено в «{place.name}»: {movedNames.length}</strong>
+          <span className="muted">{movedNames.join(', ')}</span>
+          <button
+            type="button"
+            className="ghost assigned-codes-toggle"
+            onClick={() => state.jump({ name: 'place', placeId })}
+          >
+            Открыть «{place.name}» и посмотреть
+          </button>
+        </div>
+      ) : null}
+
+      <div className="panel stack">
+        <span className="muted">Или отметьте вручную — откуда взять:</span>
         {ancestors.length > 0 ? (
           <div className="chip-row">
             {ancestors.map((entry) => (
@@ -214,27 +308,13 @@ export function GatherItemsScreen({ state, placeId }: { state: KeepItState; plac
                 key={entry.id}
                 type="button"
                 className={`suggest-chip${entry.id === sourceId ? '' : ' neutral'}`}
+                aria-pressed={entry.id === sourceId}
                 onClick={() => chooseSource(entry.id)}
               >
                 {entry.name} · {contentCount(entry.id)}
               </button>
             ))}
           </div>
-        ) : null}
-        <button type="button" className="secondary" onClick={() => setScanning((current) => !current)}>
-          {scanning ? 'Закрыть сканер' : 'Сканировать QR коробки или вещи'}
-        </button>
-        {scanning ? (
-          <MoveQrScan
-            busy={busy}
-            continuous
-            hint="Сканируйте метки коробок, мест и вещей подряд — каждая добавится в список «К переносу»"
-            actionLabel="Добавить по коду"
-            manualPlaceholder="Код или путь коробки"
-            onResolved={() => undefined}
-            onRawScan={onScanned}
-            onFail={() => undefined}
-          />
         ) : null}
         {otherPlaces.length > 0 ? (
           <label className="field">
@@ -330,64 +410,6 @@ export function GatherItemsScreen({ state, placeId }: { state: KeepItState; plac
               ) : null}
             </>
           )}
-        </div>
-      ) : null}
-
-      {selectedCount > 0 ? (
-        <div className="panel stack">
-          <div className="row">
-            <strong className="grow">К переносу: {selectedCount}</strong>
-            <button
-              type="button"
-              className="ghost"
-              disabled={busy}
-              onClick={() => {
-                setSelectedItems(new Set())
-                setSelectedPlaces(new Set())
-              }}
-            >
-              Очистить
-            </button>
-          </div>
-          <div className="list">
-            {pickedPlaces.map((entry) => (
-              <div key={entry.id} className="row gather-picked">
-                <span className="stack-tight grow">
-                  <strong>
-                    <PlaceTypeIcon type={entry.type} />
-                    {entry.name}
-                  </strong>
-                  <span className="muted">из: {entry.parentId ? pathLabel(entry.parentId) : '—'}</span>
-                </span>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label={`Убрать «${entry.name}» из списка`}
-                  onClick={() => unpick(setSelectedPlaces, entry.id)}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-            {pickedItems.map((item) => (
-              <div key={item.id} className="row gather-picked">
-                <span className="stack-tight grow">
-                  <strong>{item.name}</strong>
-                  <span className="muted">
-                    {formatQty(item.quantity, item.unit)} · из: {pathLabel(item.placeId)}
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label={`Убрать «${item.name}» из списка`}
-                  onClick={() => unpick(setSelectedItems, item.id)}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
         </div>
       ) : null}
 

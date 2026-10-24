@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { onAddPlaceRequest } from '../data/uiEvents'
+import { onAddPlaceRequest, onMovePlaceRequest } from '../data/uiEvents'
 import { ChoiceSelect } from './ChoiceSelect'
 import { DataExchange } from './DataExchange'
 import { MoveItemSheet, MovePlaceSheet } from './MoveItemSheet'
@@ -7,7 +7,6 @@ import { ObjectAppearanceSheet, appearanceFromPlace } from './ObjectAppearanceSh
 import { helpForScreen } from '../data/help'
 import { defaultObjectAppearance, objectLabelFromPlaces } from '../data/icons'
 import { PLACE_TYPES, canNest } from '../data/placeTypes'
-import { movesWithContents } from '../data/repository'
 import { dueServiceItems } from '../data/service'
 import type { KeepItState } from '../hooks/useKeepIt'
 import type { PlaceType, Screen } from '../types'
@@ -95,6 +94,16 @@ export function TopBar({ state }: { state: KeepItState }) {
       }),
     [screenName],
   )
+  // Значок «Перенести это место» на экране места
+  useEffect(
+    () =>
+      onMovePlaceRequest(() => {
+        setHint(null)
+        setActionError(null)
+        setSheet('move-place')
+      }),
+    [],
+  )
 
   function closeSheet() {
     setSheet(null)
@@ -108,7 +117,7 @@ export function TopBar({ state }: { state: KeepItState }) {
     const placeId = state.screen.placeId
     const place = state.findPlace(placeId)
     const contents = state.contentsOf(placeId)
-    const withContents = Boolean(place && movesWithContents(place.type)) && contents.places + contents.items > 0
+    const withContents = contents.places + contents.items > 0
     setBusy(true)
     setActionError(null)
     try {
@@ -449,18 +458,11 @@ function DeletePlaceText({ state, placeId }: { state: KeepItState; placeId: stri
   const contents = state.contentsOf(placeId)
   const empty = contents.places + contents.items === 0
   if (empty) return <p>Удалить пустое место «{name}»?</p>
-  if (place && movesWithContents(place.type)) {
-    return (
-      <p>
-        Удалить «{name}» вместе с содержимым? Будет удалено вещей: {contents.items}
-        {contents.places > 0 ? `, вложенных мест: ${contents.places}` : ''}. Это нельзя отменить.
-      </p>
-    )
-  }
   return (
     <p>
-      В «{name}» есть вложенные места или вещи. Сначала перенесите их, затем удалите место. Вместе с
-      содержимым можно удалить только коробку или контейнер.
+      Удалить «{name}» вместе со всем содержимым? Будет удалено вещей: {contents.items}
+      {contents.places > 0 ? `, вложенных мест: ${contents.places}` : ''}. Это нельзя отменить — если что-то
+      нужно сохранить, сначала перенесите это в другое место.
     </p>
   )
 }
@@ -684,9 +686,7 @@ function MenuActions({
                 onMovePlace()
               }}
             >
-              <strong>
-                {place && movesWithContents(place.type) ? 'Перенести с содержимым' : 'Перенести'}
-              </strong>
+              <strong>Перенести в другое место (с содержимым)</strong>
             </button>
             <button
               type="button"

@@ -3,6 +3,7 @@ import type { KeepItState } from '../hooks/useKeepIt'
 import { inventoryRoute, useInventorySession } from '../data/inventory'
 import { formatLentDate } from '../data/repository'
 import type { Place } from '../types'
+import { requestMovePlace } from '../data/uiEvents'
 
 /** Лист с загнутым уголком, стрелка в него и «+» — импорт списка вещей */
 function ImportIcon() {
@@ -26,6 +27,17 @@ function MoveIcon() {
       <path d="M12.3 8.6 15 11.3l2.7-2.7" />
       <path d="M7.5 14h15" />
       <path d="M9 14v6a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-6" />
+    </svg>
+  )
+}
+
+/** Коробка и стрелка из неё вправо — перенести это место в другое */
+function MoveOutIcon() {
+  return (
+    <svg className="nav-svg" viewBox="0 0 24 24" aria-hidden>
+      <path d="M3 9h11v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" />
+      <path d="M3 9l2-4h7l2 4" />
+      <path d="M12 14.5h9.5M18.5 11.5l3 3-3 3" />
     </svg>
   )
 }
@@ -102,6 +114,11 @@ export function PlaceTools({
       >
         <MoveIcon />
       </ToolButton>
+      {place.type !== 'object' ? (
+        <ToolButton label="Перенести это место в другое (с содержимым)" onClick={requestMovePlace}>
+          <MoveOutIcon />
+        </ToolButton>
+      ) : null}
       <ToolButton
         label={inventoryLabel}
         className={`${doneDate ? 'tool-with-date' : ''}${inventoryActive ? ' is-active' : ''}`.trim()}

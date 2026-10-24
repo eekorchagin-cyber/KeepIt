@@ -6,7 +6,7 @@ import { rootObjects } from '../data/icons'
 import { parsePlaceFromScan } from '../data/placeCodes'
 import { getQrDetector } from '../data/qrDetector'
 import { playScanSound, scanSoundEnabled, setScanSoundEnabled } from '../data/scanSound'
-import { listPlaces, movesWithContents } from '../data/repository'
+import { listPlaces } from '../data/repository'
 import { canNest, nestError } from '../data/placeTypes'
 import type { Place } from '../types'
 
@@ -109,11 +109,11 @@ export function MovePlaceSheet({
     )
   }
 
-  const withContents = movesWithContents(place.type)
-  const stock = state.stockInSubtree(place.id)
+  const contents = state.contentsOf(place.id)
+  const withContents = contents.places + contents.items > 0
   const subjectLabel = withContents
-    ? `«${place.name}» переедет вместе со всем содержимым${stock.itemCount > 0 ? ` (${stock.itemCount})` : ''}`
-    : `«${place.name}» → внутрь выбранного места. Если есть содержимое — сначала перенесите его (или используйте коробку/контейнер).`
+    ? `«${place.name}» переедет вместе со всем содержимым (вещей: ${contents.items}${contents.places ? `, мест: ${contents.places}` : ''})`
+    : `«${place.name}» → внутрь выбранного места`
 
   return (
     <PlaceTargetSheet

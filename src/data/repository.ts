@@ -632,13 +632,7 @@ export function movesWithContents(type: PlaceType): boolean {
   return type === 'box' || type === 'container'
 }
 
-async function placeSubtreeHasContent(placeId: string, nested: Set<string>): Promise<boolean> {
-  if (nested.size > 0) return true
-  const directItems = await db.items.where('placeId').equals(placeId).count()
-  return directItems > 0
-}
-
-/** Перенести место под нового родителя. Коробки/контейнеры — вместе с содержимым. */
+/** Перенести место под нового родителя вместе со всем, что в нём лежит (по правилам вложенности типов). */
 export async function movePlace(placeId: string, newParentId: string): Promise<Place> {
   const place = await getPlace(placeId)
   const parent = await getPlace(newParentId)
@@ -652,13 +646,6 @@ export async function movePlace(placeId: string, newParentId: string): Promise<P
   const nested = descendantIds(place.id, all)
   if (nested.has(parent.id)) {
     throw new Error('Нельзя перенести место внутрь его же вложенного места')
-  }
-
-  const hasContent = await placeSubtreeHasContent(place.id, nested)
-  if (hasContent && !movesWithContents(place.type)) {
-    throw new Error(
-      'Сначала перенесите содержимое. Перенос вместе с содержимым доступен для коробок и контейнеров.',
-    )
   }
 
   const at = nowIso()
@@ -708,13 +695,11 @@ export async function deletePlace(placeId: string): Promise<void> {
   await db.places.delete(placeId)
 }
 
-/** Удалить коробку или контейнер вместе со всеми вложенными местами и вещами. */
+/** Удалить место (любое, кроме главного объекта) вместе со всеми вложенными местами и вещами. */
 export async function deletePlaceWithContents(placeId: string): Promise<{ places: number; items: number }> {
   const place = await getPlace(placeId)
   if (!place) throw new Error('Место не найдено')
-  if (!movesWithContents(place.type)) {
-    throw new Error('Вместе с содержимым можно удалить только коробку или контейнер')
-  }
+  if (place.type === 'object') throw new Error('Главный объект нельзя удалить')
   const all = await db.places.toArray()
   const placeIds = [place.id, ...descendantIds(place.id, all)]
   const items = await db.items.where('placeId').anyOf(placeIds).toArray()

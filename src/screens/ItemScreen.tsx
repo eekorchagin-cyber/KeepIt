@@ -24,6 +24,8 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
   const item = state.findItem(itemId)
   const place = item ? state.findPlace(item.placeId) : undefined
   const [amount, setAmount] = useState('1')
+  /** Итог последнего «+» / «−» — рядом с кнопками, а не только в заголовке вверху */
+  const [qtyNotice, setQtyNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
@@ -53,6 +55,7 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
     const current = item
     setBusy(true)
     setError(null)
+    setQtyNotice(null)
     try {
       const delta = Number(amount.replace(',', '.'))
       if (Number.isNaN(delta) || delta <= 0) throw new Error('Укажите положительное количество')
@@ -65,6 +68,10 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
         throw new Error('Количество постоянного хранения не может быть меньше 1')
       }
       await state.changeQuantity(current.id, next, kind)
+      setQtyNotice(
+        `${kind === 'in' ? (current.mode === 'durable' ? 'Добавлено' : 'Приход') : current.mode === 'durable' ? 'Убрано' : 'Расход'} ` +
+          `${formatQty(delta, current.unit)} — стало ${formatQty(next, current.unit)}`,
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка')
     } finally {
@@ -277,8 +284,12 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
 
       {!item.needsFill ? (
         <div className="panel stack">
-          <strong>{item.mode === 'durable' ? 'Изменить количество' : 'Расход / Приход'}</strong>
+          <div className="row">
+            <strong className="grow">{item.mode === 'durable' ? 'Изменить количество' : 'Расход / Приход'}</strong>
+            <span className="muted">Сейчас: {formatQty(item.quantity, item.unit)}</span>
+          </div>
           {error && !lendOpen ? <p className="error">{error}</p> : null}
+          {qtyNotice && !error ? <p className="scan-feedback ok">{qtyNotice}</p> : null}
           <div className="qty-actions">
             <button
               type="button"
