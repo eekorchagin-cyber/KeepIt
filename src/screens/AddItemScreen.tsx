@@ -7,6 +7,7 @@ import { findName } from '../data/itemNames'
 import { normalizeSearch } from '../data/repository'
 import { unitForMode, unitOptionsFor } from '../data/units'
 import { ChoosePlaceSheet } from '../components/MoveItemSheet'
+import { AutoGrowInput } from '../components/AutoGrowInput'
 import { PlaceTypeIcon } from '../components/PlaceTypeIcon'
 import { PLACE_TYPES, canNest } from '../data/placeTypes'
 import type { AccountingMode, PlaceType, UnitCode } from '../types'
@@ -247,16 +248,15 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
 
           <label className="field">
             Название
-            <input
+            <AutoGrowInput
               className="name-input"
               value={name}
-              onChange={(e) => {
+              onChange={(value) => {
                 setTypingName(true)
-                onNameChange(e.target.value)
+                onNameChange(value)
               }}
               onBlur={() => setTypingName(false)}
               placeholder="Дрель"
-              autoComplete="off"
             />
           </label>
           {suggestions.length > 0 ? (

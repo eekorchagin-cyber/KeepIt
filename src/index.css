@@ -109,6 +109,14 @@ textarea {
   resize: vertical;
 }
 
+/* Название: растёт по высоте под текст, без ручки изменения размера */
+textarea.auto-grow {
+  min-height: var(--tap);
+  resize: none;
+  overflow: hidden;
+  line-height: 1.35;
+}
+
 button.field-trigger {
   width: 100%;
   min-height: var(--tap);

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CategoryPicker } from '../components/CategoryPicker'
 import { ChoiceSelect } from '../components/ChoiceSelect'
+import { AutoGrowInput } from '../components/AutoGrowInput'
 import { MODE_OPTIONS } from '../data/modes'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { unitForMode, unitOptionsFor } from '../data/units'
@@ -84,7 +85,7 @@ export function EditItemScreen({ state, itemId }: { state: KeepItState; itemId: 
 
         <label className="field">
           Название
-          <input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+          <AutoGrowInput value={name} onChange={setName} autoFocus />
         </label>
 
         <label className="field">
