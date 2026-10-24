@@ -29,9 +29,14 @@ const NO_CATEGORY = ''
 
 function ItemRow({ state, item }: { state: KeepItState; item: Item }) {
   const place = state.findPlace(item.placeId)
-  const path = place ? state.pathFor(place.id).map((p) => p.name).join(' → ') : '—'
+  const path = place ? state.pathFor(place.id).map((p) => p.name).join(' → ') : 'место не найдено'
+  async function open() {
+    // Вещь из другого объекта: переключаемся на него, как при сканировании
+    if (place && place.objectKey !== state.settings?.activeObject) await state.setActiveObject(place.objectKey)
+    state.navigate({ name: 'item', itemId: item.id })
+  }
   return (
-    <button type="button" className="list-item" onClick={() => state.navigate({ name: 'item', itemId: item.id })}>
+    <button type="button" className="list-item" onClick={() => void open()}>
       <span className="stack-tight">
         <strong>{item.name}</strong>
         <span className="muted">
@@ -144,7 +149,15 @@ function NameResults({ state, items, q }: { state: KeepItState; items: Item[]; q
   }
   const unfilled = items.filter((item) => missingInfo(item))
   const source = onlyUnfilled ? unfilled : items
-  const results = q ? source.filter((item) => normalizeSearch(item.name).includes(q)) : source
+  // По названию ищем во всех объектах: сначала текущий, ниже — остальные (и вещи без места)
+  const activeIds = new Set(items.map((item) => item.id))
+  const matches = q
+    ? (onlyUnfilled ? state.allItems.filter((item) => missingInfo(item)) : state.allItems).filter((item) =>
+        normalizeSearch(item.name).includes(q),
+      )
+    : source
+  const results = matches.filter((item) => activeIds.has(item.id))
+  const elsewhere = q ? matches.filter((item) => !activeIds.has(item.id)) : []
   return (
     <div className="panel stack">
       <div className="chip-row">
@@ -158,16 +171,33 @@ function NameResults({ state, items, q }: { state: KeepItState; items: Item[]; q
         </button>
       </div>
       <span className="muted">
-        {q ? `Найдено: ${results.length}` : onlyUnfilled ? `Незаполненные: ${results.length}` : `Все вещи: ${results.length}`}
+        {q
+          ? `Найдено: ${results.length + elsewhere.length}`
+          : onlyUnfilled
+            ? `Незаполненные: ${results.length}`
+            : `Все вещи: ${results.length}`}
       </span>
       <div className="list">
-        {results.length === 0 ? (
-          <p className="muted">{onlyUnfilled && !q ? 'Все карточки заполнены' : 'Ничего не найдено в активном объекте'}</p>
+        {results.length === 0 && elsewhere.length === 0 ? (
+          <p className="muted">{onlyUnfilled && !q ? 'Все карточки заполнены' : 'Ничего не найдено ни в одном объекте'}</p>
+        ) : null}
+        {results.length === 0 && elsewhere.length > 0 ? (
+          <p className="muted">В текущем объекте не найдено — есть в других:</p>
         ) : null}
         {results.map((item) => (
           <ItemRow key={item.id} state={state} item={item} />
         ))}
       </div>
+      {elsewhere.length > 0 ? (
+        <>
+          {results.length > 0 ? <strong>В других объектах</strong> : null}
+          <div className="list">
+            {elsewhere.map((item) => (
+              <ItemRow key={item.id} state={state} item={item} />
+            ))}
+          </div>
+        </>
+      ) : null}
     </div>
   )
 }

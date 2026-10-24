@@ -45,6 +45,7 @@ export async function ensureSeeded(): Promise<AppSettings> {
     await migrateHomeToApartment()
     await migrateObjectIconsIfNeeded()
     await migratePlaceCodesIfNeeded()
+    await repairPlaceObjectKeys()
     const normalized = normalizeSettings(existing)
     if (!existing.categories?.length) {
       await db.settings.put(normalized)
@@ -65,6 +66,28 @@ export async function ensureSeeded(): Promise<AppSettings> {
   })
 
   return settings
+}
+
+/**
+ * Метка объекта у места должна совпадать с объектом, в котором оно лежит по цепочке родителей.
+ * Если разошлась (старые переносы, импорт) — вещи такого места не видны в поиске и списках объекта.
+ */
+async function repairPlaceObjectKeys(): Promise<void> {
+  const places = await db.places.toArray()
+  const byId = new Map(places.map((place) => [place.id, place]))
+  const at = nowIso()
+  const fixed: Place[] = []
+  for (const place of places) {
+    if (place.type === 'object') continue
+    let current: Place | undefined = place
+    for (let depth = 0; current && current.type !== 'object' && depth < 64; depth += 1) {
+      current = current.parentId ? byId.get(current.parentId) : undefined
+    }
+    if (current?.type === 'object' && current.objectKey !== place.objectKey) {
+      fixed.push({ ...place, objectKey: current.objectKey, version: place.version + 1, updatedAt: at, syncStatus: 'pending' })
+    }
+  }
+  if (fixed.length) await db.places.bulkPut(fixed)
 }
 
 /** Удаляет дубликаты деревьев от повторного сида (другой familyId). */
@@ -1211,10 +1234,27 @@ export async function moveItems(itemIds: string[], placeId: string): Promise<num
   return moved
 }
 
+/** Латинские буквы, неотличимые на вид от русских: «Фeн» с латинской e должен находиться по «фен» */
+const LOOKALIKE_LATIN: Record<string, string> = {
+  a: 'а',
+  b: 'в',
+  c: 'с',
+  e: 'е',
+  h: 'н',
+  k: 'к',
+  m: 'м',
+  o: 'о',
+  p: 'р',
+  t: 'т',
+  x: 'х',
+  y: 'у',
+}
+
 export function normalizeSearch(value: string): string {
   return value
     .toLowerCase()
     .replaceAll('ё', 'е')
+    .replace(/[abcehkmoptxy]/g, (letter) => LOOKALIKE_LATIN[letter] ?? letter)
     .replace(/\s+/g, ' ')
     .trim()
 }
