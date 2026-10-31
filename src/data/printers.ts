@@ -16,7 +16,7 @@ export type PrinterProfile = {
   method: PrinterMethod
   /** Размеры этикеток (для «image»); первый — по умолчанию */
   sizes: LabelSize[]
-  /** Точек на мм при подготовке картинок (203 dpi ≈ 8) */
+  /** Точек на мм при подготовке картинок (203 dpi ≈ 8, 300 dpi ≈ 12) */
   dotsPerMm: number
   steps: string[]
   /** Лотки принтера: KeepIt подсказывает, как выбрать лоток в системном окне печати (сам выбрать его не может) */
@@ -101,6 +101,25 @@ export const PRINTERS: PrinterProfile[] = [
       { widthMm: 30, heightMm: 20 },
     ],
     dotsPerMm: 8,
+    steps: [
+      'Выберите размер этикетки — как у рулона в принтере.',
+      SAVE_IMAGES_STEP,
+      'Откройте приложение NIIMBOT и подключите принтер по Bluetooth.',
+      'Создайте новую этикетку того же размера и добавьте элемент «Изображение» — выберите сохранённую метку.',
+      'Растяните картинку на всю этикетку и нажмите «Печать». Для каждой метки повторите выбор изображения.',
+    ],
+  },
+  {
+    id: 'niimbot-b21-pro',
+    name: 'NIIMBOT B21 Pro',
+    kind: 'Через приложение NIIMBOT · этикетки до 50 мм · 300 dpi',
+    method: 'image',
+    sizes: [
+      { widthMm: 50, heightMm: 30 },
+      { widthMm: 40, heightMm: 30 },
+      { widthMm: 30, heightMm: 20 },
+    ],
+    dotsPerMm: 12,
     steps: [
       'Выберите размер этикетки — как у рулона в принтере.',
       SAVE_IMAGES_STEP,
