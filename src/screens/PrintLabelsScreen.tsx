@@ -4,7 +4,7 @@ import QRCode from 'qrcode'
 import { PlaceStepPicker } from '../components/PlaceStepPicker'
 import { ChoiceSelect } from '../components/ChoiceSelect'
 import type { KeepItState } from '../hooks/useKeepIt'
-import { placeUrl } from '../data/placeCodes'
+import { itemUrl, placeUrl } from '../data/placeCodes'
 import { canHoldFreeLabels } from '../data/repository'
 import { renderLabelDataUrl, renderLabelPng, safeFileName, shareFiles, shareLabelImages } from '../data/labelImage'
 import { LABEL_DOTS_PER_MM, renderLabelsPdf } from '../data/labelPdf'
@@ -42,6 +42,8 @@ const PAPER_KEY = 'keepit-label-paper'
 const CUT_KEY = 'keepit-label-cut'
 const PLACEMENT_KEY = 'keepit-label-text'
 const TRAY_KEY = 'keepit-printer-tray'
+/** В режиме «Одно место»: показывать вещи для печати их QR */
+const INCLUDE_ITEMS_KEY = 'keepit-print-include-items'
 
 /** Размер этикетки, бумага и линии разреза: сохранённые или перенесённые из прежнего выбора листа */
 function initialSheetChoice(): { formatId: string; paper: PaperSize; cutLines: boolean } {
@@ -77,7 +79,9 @@ type PrintMode = 'room' | 'single'
 /** Куда выводить метки AirPrint-принтера: системное окно печати или PDF-файл */
 type OutputTarget = 'print' | 'pdf'
 
-type LabelView = Place & { qrDataUrl: string }
+/** Одна метка к печати: место или вещь — одинаковый QR/PDF/картинка */
+type LabelSpec = { id: string; name: string; url: string; path: string }
+type LabelView = LabelSpec & { qrDataUrl: string }
 type LabelImage = { id: string; name: string; blob: Blob; previewUrl: string }
 
 /**
@@ -104,26 +108,18 @@ function writeStored(key: string, value: string) {
   }
 }
 
-/** Список меток: название, путь (полный или внутри помещения) и QR-код. */
-function LabelList({
-  title,
-  labels,
-  pathOf,
-}: {
-  title: string
-  labels: LabelView[]
-  pathOf: (id: string) => string
-}) {
+/** Список меток: название, путь и QR-код. */
+function LabelList({ title, labels }: { title: string; labels: LabelView[] }) {
   return (
     <div className="stack">
       <strong>{title}</strong>
-      {labels.length === 0 ? <span className="muted">Выберите место</span> : null}
+      {labels.length === 0 ? <span className="muted">Выберите место или вещь</span> : null}
       <div className="list">
         {labels.map((label) => (
           <div key={label.id} className="list-item">
             <span className="stack-tight">
               <strong>{label.name}</strong>
-              {pathOf(label.id) ? <span className="place-code muted">{pathOf(label.id)}</span> : null}
+              {label.path ? <span className="place-code muted">{label.path}</span> : null}
             </span>
             <img src={label.qrDataUrl} alt="" width={56} height={56} />
           </div>
@@ -157,6 +153,9 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
   )
   const [roomId, setRoomId] = useState(() => (nestedRoot ? nestedRoot.id : startId ? roomOf(startId) : ''))
   const [singleId, setSingleId] = useState(startId)
+  /** Если задано — печатаем QR вещи, а не места */
+  const [singleItemId, setSingleItemId] = useState<string | null>(null)
+  const [includeItems, setIncludeItems] = useState(() => readStored(INCLUDE_ITEMS_KEY) === '1')
   const [printerId, setPrinterId] = useState(() => findPrinter(readStored(PRINTER_KEY) ?? DEFAULT_PRINTER_ID).id)
   const [sizeIndex, setSizeIndex] = useState(() => Number(readStored(SIZE_KEY) ?? 0) || 0)
   const [sheetChoice, setSheetChoice] = useState(initialSheetChoice)
@@ -204,27 +203,6 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
       }))
       .sort((a, b) => a.label.localeCompare(b.label, 'ru')),
   ]
-  const sourcePlaces = useMemo(() => {
-    if (mode === 'single') {
-      const one = state.findPlace(singleId)
-      return one ? [one] : []
-    }
-    const root = state.findPlace(roomId)
-    if (!root) return [] as Place[]
-    const result: Place[] = []
-    const visit = (place: Place) => {
-      result.push(place)
-      for (const child of state.childPlaces(place.id)) visit(child)
-    }
-    visit(root)
-    return result
-  }, [mode, roomId, singleId, state])
-
-  const printList = useMemo(() => {
-    const seen = new Set(sourcePlaces.map((place) => place.id))
-    return [...sourcePlaces, ...extraPlaces.filter((place) => !seen.has(place.id))]
-  }, [sourcePlaces, extraPlaces])
-
   /** Путь к месту без его названия: «Дача / Каменный гараж» — печатается на метке под названием */
   function parentPath(id: string): string {
     return state
@@ -234,19 +212,53 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
       .join(' / ')
   }
 
-  /** Путь внутри выбранного помещения — в списке «Метки к печати» */
-  function pathInRoom(id: string): string {
-    const path = state.pathFor(id)
-    const index = path.findIndex((part) => part.id === roomId)
-    return path
-      .slice(index >= 0 ? index + 1 : 1, -1)
+  /** Полный путь места: «Дача / Баня / Комната отдыха» */
+  function fullPath(id: string): string {
+    return state
+      .pathFor(id)
       .map((part) => part.name)
       .join(' / ')
   }
 
-  function labelSetKey(list: Place[]): string {
+  function placeLabel(place: Place): LabelSpec {
+    return { id: place.id, name: place.name, url: placeUrl(place.id), path: parentPath(place.id) }
+  }
+
+  const sourceLabels = useMemo((): LabelSpec[] => {
+    if (mode === 'single') {
+      if (singleItemId) {
+        const item = state.findItem(singleItemId) ?? state.allItems.find((entry) => entry.id === singleItemId)
+        if (!item) return []
+        return [{ id: item.id, name: item.name, url: itemUrl(item.id), path: fullPath(item.placeId) }]
+      }
+      const one = state.findPlace(singleId)
+      return one ? [placeLabel(one)] : []
+    }
+    const root = state.findPlace(roomId)
+    if (!root) return []
+    const result: LabelSpec[] = []
+    const visit = (place: Place) => {
+      result.push(placeLabel(place))
+      for (const child of state.childPlaces(place.id)) visit(child)
+    }
+    visit(root)
+    return result
+    // placeLabel/fullPath зависят только от state.places
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, roomId, singleId, singleItemId, state])
+
+  const printList = useMemo(() => {
+    const seen = new Set(sourceLabels.map((label) => label.id))
+    const extras = extraPlaces
+      .filter((place) => !seen.has(place.id))
+      .map((place) => placeLabel(place))
+    return [...sourceLabels, ...extras]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceLabels, extraPlaces, state.places])
+
+  function labelSetKey(list: LabelSpec[]): string {
     return `${printer.id}:${sheet.id}:${placement}:${list
-      .map((place) => place.id)
+      .map((label) => label.id)
       .sort()
       .join(',')}`
   }
@@ -257,9 +269,9 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     let cancelled = false
     void (async () => {
       const prepared = await Promise.all(
-        printList.map(async (place) => ({
-          ...place,
-          qrDataUrl: await QRCode.toDataURL(placeUrl(place.id), {
+        printList.map(async (label) => ({
+          ...label,
+          qrDataUrl: await QRCode.toDataURL(label.url, {
             margin: 1,
             width: 320,
             errorCorrectionLevel: 'M',
@@ -284,7 +296,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
    * Страницы для системного окна печати — те же картинки и та же раскладка, что в PDF.
    * Картинки рисуются порциями с паузами, чтобы экран не подвисал на больших наборах.
    */
-  async function buildPrintJob(list: Place[], isCancelled: () => boolean): Promise<PrintJob | null> {
+  async function buildPrintJob(list: LabelSpec[], isCancelled: () => boolean): Promise<PrintJob | null> {
     const tape = printer.method === 'airprint-tape'
     const size = tape ? TAPE_LABEL : sheet
     const sources: string[] = []
@@ -293,8 +305,8 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
         await new Promise((resolve) => window.setTimeout(resolve, 0))
         if (isCancelled()) return null
       }
-      const place = list[index]!
-      sources.push(renderLabelDataUrl(place.name, placeUrl(place.id), size, LABEL_DOTS_PER_MM, parentPath(place.id), placement))
+      const label = list[index]!
+      sources.push(renderLabelDataUrl(label.name, label.url, size, LABEL_DOTS_PER_MM, label.path, placement))
     }
     const key = labelSetKey(list)
     if (tape) {
@@ -303,8 +315,8 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
         pageWidthMm: TAPE_LABEL.widthMm,
         pageHeightMm: TAPE_LABEL.heightMm,
         cutLines: false,
-        pages: list.map((place, index) => [
-          { id: place.id, src: sources[index]!, x: 0, y: 0, w: TAPE_LABEL.widthMm, h: TAPE_LABEL.heightMm },
+        pages: list.map((label, index) => [
+          { id: label.id, src: sources[index]!, x: 0, y: 0, w: TAPE_LABEL.widthMm, h: TAPE_LABEL.heightMm },
         ]),
       }
     }
@@ -349,14 +361,14 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
    * AirPrint — системное окно печати или PDF: одни и те же картинки меток в одной раскладке;
    * термопринтер — картинки точно под размер этикетки.
    */
-  async function output(list: Place[], target: OutputTarget) {
+  async function output(list: LabelSpec[], target: OutputTarget) {
     setBusy(true)
     setError(null)
     try {
       if (isAirPrint && (target === 'pdf' || !directPrint)) {
         const purpose = target === 'print' ? 'print' : 'save'
         const blob = await renderLabelsPdf(
-          list.map((place) => ({ name: place.name, url: placeUrl(place.id), path: parentPath(place.id) })),
+          list.map((label) => ({ name: label.name, url: label.url, path: label.path })),
           printer.method === 'airprint-tape' ? 'airprint-tape' : 'airprint-a4',
           { sheet, placement },
         )
@@ -374,16 +386,9 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
         return
       }
       const prepared = await Promise.all(
-        list.map(async (place) => {
-          const blob = await renderLabelPng(
-            place.name,
-            placeUrl(place.id),
-            size,
-            printer.dotsPerMm,
-            parentPath(place.id),
-            placement,
-          )
-          return { id: place.id, name: place.name, blob, previewUrl: URL.createObjectURL(blob) }
+        list.map(async (label) => {
+          const blob = await renderLabelPng(label.name, label.url, size, printer.dotsPerMm, label.path, placement)
+          return { id: label.id, name: label.name, blob, previewUrl: URL.createObjectURL(blob) }
         }),
       )
       setImages(prepared)
@@ -439,10 +444,18 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     writeStored(SIZE_KEY, String(index))
   }
 
-  /** Куда класть свободные метки: выбранное помещение или помещение выбранного места. */
-  const freeParent = state.findPlace(mode === 'room' ? roomId : roomOf(singleId))
-  // Не во весь объект: иначе заготовки встают в один ряд с помещениями
-  const canCreateFree = Boolean(freeParent && canHoldFreeLabels(freeParent.type))
+  /** Куда класть свободные метки: выбранное помещение или помещение выбранного места/вещи. */
+  const freeAnchorId = (() => {
+    if (mode === 'room') return roomId
+    if (singleItemId) {
+      const item = state.findItem(singleItemId) ?? state.allItems.find((entry) => entry.id === singleItemId)
+      return item ? roomOf(item.placeId) : ''
+    }
+    return singleId ? roomOf(singleId) : ''
+  })()
+  const freeParent = state.findPlace(freeAnchorId)
+  // Не во весь объект: иначе заготовки встают в один ряд с помещениями; для вещи свободные метки не предлагаем
+  const canCreateFree = Boolean(freeParent && canHoldFreeLabels(freeParent.type) && !singleItemId)
   /** Сколько этикеток останется пустыми на последнем листе A4 — их удобно занять свободными метками */
   const sheetRemainder =
     printer.method === 'airprint-a4' && printList.length > 0 && sheet.cols * sheet.rows > 0
@@ -506,8 +519,8 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     try {
       const created = await state.makeFreeLabels(freeParent.id, freeCount)
       setExtraPlaces((current) => [...current, ...created])
-      const seen = new Set(printList.map((place) => place.id))
-      const full = [...printList, ...created.filter((place) => !seen.has(place.id))]
+      const seen = new Set(printList.map((label) => label.id))
+      const full = [...printList, ...created.filter((place) => !seen.has(place.id)).map((place) => placeLabel(place))]
       if (target === 'print' && directPrint) {
         // Создание меток заняло время — окно печати откроется по следующему нажатию
         setMessage(`Свободные метки созданы (${created.length}). Нажмите «Печать» ещё раз.`)
@@ -578,7 +591,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
             className={mode === 'single' ? undefined : 'secondary'}
             onClick={() => setMode('single')}
           >
-            Одно место
+            Одно место или вещь
           </button>
         </div>
         {mode === 'room' && nestedRoot ? (
@@ -597,17 +610,59 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
             />
           </label>
         ) : (
-          <PlaceStepPicker state={state} value={singleId} onChange={setSingleId} />
+          <>
+            <div className="split-row">
+              <button
+                type="button"
+                className={includeItems ? undefined : 'secondary'}
+                aria-pressed={includeItems}
+                onClick={() => {
+                  setIncludeItems(true)
+                  writeStored(INCLUDE_ITEMS_KEY, '1')
+                }}
+              >
+                С вещами
+              </button>
+              <button
+                type="button"
+                className={!includeItems ? undefined : 'secondary'}
+                aria-pressed={!includeItems}
+                onClick={() => {
+                  setIncludeItems(false)
+                  setSingleItemId(null)
+                  writeStored(INCLUDE_ITEMS_KEY, '0')
+                }}
+              >
+                Только места
+              </button>
+            </div>
+            <PlaceStepPicker
+              state={state}
+              placeId={singleId}
+              itemId={includeItems ? singleItemId : null}
+              includeItems={includeItems}
+              onSelectPlace={(id) => {
+                setSingleId(id)
+                setSingleItemId(null)
+              }}
+              onSelectItem={(id) => {
+                const item = state.findItem(id) ?? state.allItems.find((entry) => entry.id === id)
+                if (!item) return
+                setSingleId(item.placeId)
+                setSingleItemId(item.id)
+              }}
+            />
+          </>
         )}
         {mode === 'room' ? (
           <p className="muted">
             {nestedRoot
               ? `Метки на «${nestedRoot.name}» и все места в нём на любой глубине (полки, коробки): `
               : 'Метки на помещение и все места в нём на любой глубине (стеллажи, полки, коробки): '}
-            {sourcePlaces.length}. На этикетке — QR-код, название места и путь к нему.
+            {sourceLabels.length}. На этикетке — QR-код, название места и путь к нему.
           </p>
         ) : (
-          <LabelList title="Метки к печати" labels={labels} pathOf={parentPath} />
+          <LabelList title="Метки к печати" labels={labels} />
         )}
       </div>
 
@@ -832,7 +887,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
         </div>
       ) : mode === 'room' ? (
         <div className="panel stack">
-          <LabelList title="Метки к печати" labels={labels} pathOf={pathInRoom} />
+          <LabelList title="Метки к печати" labels={labels} />
         </div>
       ) : null}
 
