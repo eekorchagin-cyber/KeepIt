@@ -117,7 +117,9 @@ export default function App() {
         ) : null}
         {state.screen.name === 'scan' ? <ScanScreen state={state} /> : null}
         {state.screen.name === 'search' ? <SearchScreen state={state} /> : null}
-        {state.screen.name === 'print' ? <PrintLabelsScreen state={state} placeId={state.screen.placeId} /> : null}
+        {state.screen.name === 'print' ? (
+          <PrintLabelsScreen state={state} placeId={state.screen.placeId} itemId={state.screen.itemId} />
+        ) : null}
         {state.screen.name === 'settings' ? <SettingsScreen state={state} /> : null}
         {state.screen.name === 'about' ? (
           <AboutScreen update={update} onShowHistory={() => state.navigate({ name: 'releases' })} />

@@ -110,10 +110,11 @@ function fallbackParent(screen: Screen, places: Place[]): Screen {
     case 'edit-item':
       return { name: 'item', itemId: screen.itemId }
     case 'settings':
-    case 'print':
     case 'lent':
     case 'categories':
       return { name: 'more' }
+    case 'print':
+      return screen.itemId ? { name: 'item', itemId: screen.itemId } : { name: 'more' }
     case 'scan':
     case 'search':
     case 'more':
