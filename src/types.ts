@@ -49,7 +49,8 @@ export type Screen =
   | { name: 'edit-item'; itemId: string }
   | { name: 'scan' }
   | { name: 'search' }
-  | { name: 'print'; placeId?: string }
+  /** placeId — корень выбора мест; itemId — сразу печать QR этой вещи (из карточки) */
+  | { name: 'print'; placeId?: string; itemId?: string }
   | { name: 'lent' }
   | { name: 'categories' }
   | { name: 'settings' }

@@ -129,8 +129,21 @@ function LabelList({ title, labels }: { title: string; labels: LabelView[] }) {
   )
 }
 
-export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; placeId?: string }) {
-  const startId = placeId ?? state.places.find((place) => place.type === 'object')?.id ?? ''
+export function PrintLabelsScreen({
+  state,
+  placeId,
+  itemId,
+}: {
+  state: KeepItState
+  placeId?: string
+  /** Печать QR этой вещи — те же параметры принтера, что из «Действия → Печать меток» */
+  itemId?: string
+}) {
+  const startItem = itemId
+    ? (state.findItem(itemId) ?? state.allItems.find((entry) => entry.id === itemId))
+    : undefined
+  const startId =
+    startItem?.placeId ?? placeId ?? state.places.find((place) => place.type === 'object')?.id ?? ''
   const start = state.findPlace(startId)
 
   /**
@@ -146,18 +159,24 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
   /** Помещение или объект: для них — «Все места в помещении» с выбором помещения */
   const isRoomLike = (place: Place) => place.type === 'object' || place.type === 'room' || roomOf(place.id) === place.id
   /** Стеллаж, шкаф, полка, коробка: вместо помещения печатаем это место и всё, что в нём */
-  const nestedRoot = start && !isRoomLike(start) ? start : undefined
+  const nestedRoot = !startItem && start && !isRoomLike(start) ? start : undefined
 
   const [mode, setMode] = useState<PrintMode>(() =>
-    !start || isRoomLike(start) || state.childPlaces(start.id).length > 0 ? 'room' : 'single',
+    startItem
+      ? 'single'
+      : !start || isRoomLike(start) || state.childPlaces(start.id).length > 0
+        ? 'room'
+        : 'single',
   )
   const [roomId, setRoomId] = useState(() => (nestedRoot ? nestedRoot.id : startId ? roomOf(startId) : ''))
   const [singleId, setSingleId] = useState(startId)
   /** Если задано — печатаем QR вещи, а не места */
-  const [singleItemId, setSingleItemId] = useState<string | null>(null)
-  const [includeItems, setIncludeItems] = useState(() => readStored(INCLUDE_ITEMS_KEY) === '1')
+  const [singleItemId, setSingleItemId] = useState<string | null>(() => startItem?.id ?? null)
+  const [includeItems, setIncludeItems] = useState(
+    () => Boolean(startItem) || readStored(INCLUDE_ITEMS_KEY) === '1',
+  )
   /** Пока true — полный выбор «что печатать»; после выбора остаётся сводка, метки и принтер */
-  const [picking, setPicking] = useState(() => !nestedRoot)
+  const [picking, setPicking] = useState(() => !(nestedRoot || startItem))
   const [printerId, setPrinterId] = useState(() => findPrinter(readStored(PRINTER_KEY) ?? DEFAULT_PRINTER_ID).id)
   /** Живой прообраз этикетки при смене «Справа от QR» / «Под QR» */
   const [layoutPreview, setLayoutPreview] = useState<string | null>(null)
