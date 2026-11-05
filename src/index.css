@@ -1426,6 +1426,16 @@ html[data-theme='dark'] .place-type-warning {
   image-rendering: pixelated;
 }
 
+.label-layout-preview-img {
+  display: block;
+  width: min(100%, 280px);
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  image-rendering: pixelated;
+}
+
 /* Метки печатаются отдельным слоем вне приложения, чтобы выходили все страницы. */
 .print-root {
   display: none;

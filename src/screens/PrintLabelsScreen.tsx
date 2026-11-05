@@ -156,7 +156,11 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
   /** Если задано — печатаем QR вещи, а не места */
   const [singleItemId, setSingleItemId] = useState<string | null>(null)
   const [includeItems, setIncludeItems] = useState(() => readStored(INCLUDE_ITEMS_KEY) === '1')
+  /** Пока true — полный выбор «что печатать»; после выбора остаётся сводка, метки и принтер */
+  const [picking, setPicking] = useState(() => !nestedRoot)
   const [printerId, setPrinterId] = useState(() => findPrinter(readStored(PRINTER_KEY) ?? DEFAULT_PRINTER_ID).id)
+  /** Живой прообраз этикетки при смене «Справа от QR» / «Под QR» */
+  const [layoutPreview, setLayoutPreview] = useState<string | null>(null)
   const [sizeIndex, setSizeIndex] = useState(() => Number(readStored(SIZE_KEY) ?? 0) || 0)
   const [sheetChoice, setSheetChoice] = useState(initialSheetChoice)
   const [trayId, setTrayId] = useState(() => readStored(TRAY_KEY) ?? '1')
@@ -437,6 +441,64 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
     writeStored(PLACEMENT_KEY, next)
   }
 
+  function confirmSelection() {
+    if (mode === 'single' && !singleId && !singleItemId) return
+    if (mode === 'room' && !roomId && !nestedRoot) return
+    setPicking(false)
+  }
+
+  function reopenSelection() {
+    setPicking(true)
+  }
+
+  const selectionTitle = (() => {
+    if (mode === 'single' && singleItemId) {
+      const item = state.findItem(singleItemId) ?? state.allItems.find((entry) => entry.id === singleItemId)
+      return item ? `Вещь «${item.name}»` : 'Вещь'
+    }
+    if (mode === 'single') {
+      const place = state.findPlace(singleId)
+      return place ? `Место «${place.name}»` : 'Место'
+    }
+    if (nestedRoot) return `«${nestedRoot.name}» и вложенные места`
+    const room = state.findPlace(roomId)
+    return room ? `Помещение «${room.name}»` : 'Помещение'
+  })()
+
+  const selectionHint = (() => {
+    if (mode === 'single' && singleItemId) {
+      const item = state.findItem(singleItemId) ?? state.allItems.find((entry) => entry.id === singleItemId)
+      return item ? fullPath(item.placeId) : ''
+    }
+    if (mode === 'single' && singleId) return parentPath(singleId) || fullPath(singleId)
+    if (nestedRoot) return parentPath(nestedRoot.id)
+    if (roomId) return parentPath(roomId)
+    return ''
+  })()
+
+  /** Размер одной этикетки для прообраза — как при печати */
+  const previewSize: LabelSize =
+    printer.method === 'airprint-tape'
+      ? TAPE_LABEL
+      : printer.method === 'airprint-a4'
+        ? { widthMm: sheet.format.widthMm, heightMm: sheet.format.heightMm }
+        : size
+
+  useEffect(() => {
+    if (picking || printList.length === 0) {
+      setLayoutPreview(null)
+      return
+    }
+    const first = printList[0]!
+    try {
+      setLayoutPreview(
+        renderLabelDataUrl(first.name, first.url, previewSize, LABEL_DOTS_PER_MM, first.path, placement),
+      )
+    } catch {
+      setLayoutPreview(null)
+    }
+  }, [picking, printList, previewSize.widthMm, previewSize.heightMm, placement])
+
   function chooseSize(index: number) {
     setSizeIndex(index)
     setImages([])
@@ -580,92 +642,135 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
 
   return (
     <div className="stack">
-      <div className="panel stack">
-        <strong>Что печатать</strong>
-        <div className="split-row">
-          <button type="button" className={mode === 'room' ? undefined : 'secondary'} onClick={() => setMode('room')}>
-            {nestedRoot ? 'Все вложенные места хранения' : 'Все места в помещении'}
-          </button>
-          <button
-            type="button"
-            className={mode === 'single' ? undefined : 'secondary'}
-            onClick={() => setMode('single')}
-          >
-            Одно место или вещь
-          </button>
-        </div>
-        {mode === 'room' && nestedRoot ? (
-          <div className="stack-tight">
-            <strong>{nestedRoot.name}</strong>
-            <span className="place-code muted">{parentPath(nestedRoot.id)}</span>
+      {picking ? (
+        <div className="panel stack">
+          <strong>Что печатать</strong>
+          <div className="split-row">
+            <button
+              type="button"
+              className={mode === 'room' ? undefined : 'secondary'}
+              onClick={() => {
+                setMode('room')
+                setSingleItemId(null)
+                setPicking(!nestedRoot)
+              }}
+            >
+              {nestedRoot ? 'Все вложенные места хранения' : 'Все места в помещении'}
+            </button>
+            <button
+              type="button"
+              className={mode === 'single' ? undefined : 'secondary'}
+              onClick={() => {
+                setMode('single')
+                setPicking(true)
+              }}
+            >
+              Одно место или вещь
+            </button>
           </div>
-        ) : mode === 'room' ? (
-          <label className="field">
-            Помещение
-            <ChoiceSelect
-              title="Помещение"
-              value={roomId}
-              options={roomOptions.map((option) => ({ value: option.id, label: option.label }))}
-              onChange={setRoomId}
-            />
-          </label>
-        ) : (
-          <>
-            <div className="split-row">
-              <button
-                type="button"
-                className={includeItems ? undefined : 'secondary'}
-                aria-pressed={includeItems}
-                onClick={() => {
-                  setIncludeItems(true)
-                  writeStored(INCLUDE_ITEMS_KEY, '1')
-                }}
-              >
-                С вещами
-              </button>
-              <button
-                type="button"
-                className={!includeItems ? undefined : 'secondary'}
-                aria-pressed={!includeItems}
-                onClick={() => {
-                  setIncludeItems(false)
-                  setSingleItemId(null)
-                  writeStored(INCLUDE_ITEMS_KEY, '0')
-                }}
-              >
-                Только места
+          {mode === 'room' && nestedRoot ? (
+            <div className="stack-tight">
+              <strong>{nestedRoot.name}</strong>
+              <span className="place-code muted">{parentPath(nestedRoot.id)}</span>
+              <button type="button" onClick={confirmSelection}>
+                Готово — к печати ({sourceLabels.length})
               </button>
             </div>
-            <PlaceStepPicker
-              state={state}
-              placeId={singleId}
-              itemId={includeItems ? singleItemId : null}
-              includeItems={includeItems}
-              onSelectPlace={(id) => {
-                setSingleId(id)
-                setSingleItemId(null)
-              }}
-              onSelectItem={(id) => {
-                const item = state.findItem(id) ?? state.allItems.find((entry) => entry.id === id)
-                if (!item) return
-                setSingleId(item.placeId)
-                setSingleItemId(item.id)
-              }}
-            />
-          </>
-        )}
-        {mode === 'room' ? (
-          <p className="muted">
-            {nestedRoot
-              ? `Метки на «${nestedRoot.name}» и все места в нём на любой глубине (полки, коробки): `
-              : 'Метки на помещение и все места в нём на любой глубине (стеллажи, полки, коробки): '}
-            {sourceLabels.length}. На этикетке — QR-код, название места и путь к нему.
-          </p>
-        ) : (
-          <LabelList title="Метки к печати" labels={labels} />
-        )}
-      </div>
+          ) : mode === 'room' ? (
+            <>
+              <label className="field">
+                Помещение
+                <ChoiceSelect
+                  title="Помещение"
+                  value={roomId}
+                  options={roomOptions.map((option) => ({ value: option.id, label: option.label }))}
+                  onChange={(id) => {
+                    setRoomId(id)
+                    setPicking(false)
+                  }}
+                />
+              </label>
+              {roomId ? (
+                <button type="button" onClick={confirmSelection}>
+                  Готово — к печати ({sourceLabels.length})
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <div className="split-row">
+                <button
+                  type="button"
+                  className={includeItems ? undefined : 'secondary'}
+                  aria-pressed={includeItems}
+                  onClick={() => {
+                    setIncludeItems(true)
+                    writeStored(INCLUDE_ITEMS_KEY, '1')
+                  }}
+                >
+                  С вещами
+                </button>
+                <button
+                  type="button"
+                  className={!includeItems ? undefined : 'secondary'}
+                  aria-pressed={!includeItems}
+                  onClick={() => {
+                    setIncludeItems(false)
+                    setSingleItemId(null)
+                    writeStored(INCLUDE_ITEMS_KEY, '0')
+                  }}
+                >
+                  Только места
+                </button>
+              </div>
+              <PlaceStepPicker
+                state={state}
+                placeId={singleId}
+                itemId={includeItems ? singleItemId : null}
+                includeItems={includeItems}
+                onSelectPlace={(id) => {
+                  setSingleId(id)
+                  setSingleItemId(null)
+                  if (id && !includeItems && state.childPlaces(id).length === 0) setPicking(false)
+                }}
+                onSelectItem={(id) => {
+                  const item = state.findItem(id) ?? state.allItems.find((entry) => entry.id === id)
+                  if (!item) return
+                  setSingleId(item.placeId)
+                  setSingleItemId(item.id)
+                  setPicking(false)
+                }}
+              />
+              {singleId || singleItemId ? (
+                <button type="button" className="secondary" onClick={confirmSelection}>
+                  Готово — печатать {singleItemId ? 'эту вещь' : 'это место'}
+                </button>
+              ) : null}
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="panel stack">
+          <div className="row">
+            <div className="stack-tight grow">
+              <strong>{selectionTitle}</strong>
+              {selectionHint ? <span className="place-code muted">{selectionHint}</span> : null}
+              <span className="muted">Меток: {printList.length}</span>
+            </div>
+            <button type="button" className="secondary" onClick={reopenSelection}>
+              Изменить
+            </button>
+          </div>
+        </div>
+      )}
 
+      {!picking && printList.length > 0 ? (
+        <div className="panel stack">
+          <LabelList title="Метки к печати" labels={labels} />
+        </div>
+      ) : null}
+
+      {!picking ? (
       <div className="panel stack">
         <strong>Принтер</strong>
         <label className="field">
@@ -823,6 +928,16 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
               </button>
             ))}
           </div>
+          {layoutPreview ? (
+            <div className="stack-tight label-layout-preview">
+              <span className="muted">Прообраз печати</span>
+              <img
+                src={layoutPreview}
+                alt={`Прообраз метки, текст ${placement === 'below' ? 'под' : 'справа от'} QR`}
+                className="label-layout-preview-img"
+              />
+            </div>
+          ) : null}
         </div>
 
         <strong>Как печатать</strong>
@@ -875,6 +990,7 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
         {message ? <p className="muted">{message}</p> : null}
         {error ? <p className="error">{error}</p> : null}
       </div>
+      ) : null}
 
       {images.length > 0 ? (
         <div className="panel stack">
@@ -884,10 +1000,6 @@ export function PrintLabelsScreen({ state, placeId }: { state: KeepItState; plac
               <img key={image.id} src={image.previewUrl} alt={image.name} />
             ))}
           </div>
-        </div>
-      ) : mode === 'room' ? (
-        <div className="panel stack">
-          <LabelList title="Метки к печати" labels={labels} />
         </div>
       ) : null}
 
