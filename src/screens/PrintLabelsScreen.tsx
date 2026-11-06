@@ -29,7 +29,15 @@ import {
   type PaperSize,
   type TextPlacement,
 } from '../data/labelSheets'
-import { DEFAULT_PRINTER_ID, PRINTERS, findPrinter, sizeLabel, type LabelSize } from '../data/printers'
+import {
+  DEFAULT_PRINTER_ID,
+  PRINTERS,
+  findPrinter,
+  isNiimbotPrinter,
+  openNiimbotApp,
+  sizeLabel,
+  type LabelSize,
+} from '../data/printers'
 import type { Place } from '../types'
 
 const FREE_LABEL_COUNTS = [6, 12, 24]
@@ -197,6 +205,8 @@ export function PrintLabelsScreen({
   /** purpose: print — PDF для печати через «Поделиться» (iPhone), save — сохранить файл */
   const [pdfResult, setPdf] = useState<{ file: File; key: string; purpose: 'print' | 'save' } | null>(null)
   const [askFree, setAskFree] = useState<OutputTarget | null>(null)
+  /** После сохранения картинок для NIIMBOT — спросить, открыть ли приложение */
+  const [askNiimbot, setAskNiimbot] = useState(false)
   const [freeCount, setFreeCount] = useState(12)
   /** Свободные метки, созданные перед печатью — печатаются вместе с выбранными местами */
   const [extraPlaces, setExtraPlaces] = useState<Place[]>([])
@@ -619,11 +629,16 @@ export function PrintLabelsScreen({
     setError(null)
     try {
       const result = await shareLabelImages(images)
+      if (result === 'cancelled') {
+        setMessage(null)
+        return
+      }
       setMessage(
         result === 'shared'
           ? 'Картинки переданы. Теперь откройте приложение принтера и напечатайте их (шаги выше).'
           : 'Картинки скачаны. Откройте их в приложении принтера (шаги выше).',
       )
+      if (isNiimbotPrinter(printer)) setAskNiimbot(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось сохранить картинки')
     }
@@ -634,6 +649,10 @@ export function PrintLabelsScreen({
     setError(null)
     try {
       const result = await shareFiles([pdf])
+      if (result === 'cancelled') {
+        setMessage(null)
+        return
+      }
       setMessage(
         pdfPurpose === 'print'
           ? result === 'shared'
@@ -1051,6 +1070,37 @@ export function PrintLabelsScreen({
               </button>
               <button type="button" disabled={busy} onClick={() => void withFree(true)}>
                 Да, создать {freeCount} ({printList.length + freeCount})
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {askNiimbot ? (
+        <div className="sheet-backdrop" onClick={() => setAskNiimbot(false)} role="presentation">
+          <div className="sheet" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal>
+            <div className="row">
+              <strong className="grow">Запустить NIIMBOT?</strong>
+              <button type="button" className="icon-btn" onClick={() => setAskNiimbot(false)} aria-label="Закрыть">
+                ×
+              </button>
+            </div>
+            <div className="stack">
+              <p className="muted">
+                Картинки сохранены. Откройте приложение NIIMBOT, создайте этикетку того же размера и вставьте
+                сохранённое изображение — затем напечатайте.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setAskNiimbot(false)
+                  openNiimbotApp()
+                }}
+              >
+                Да, запустить NIIMBOT
+              </button>
+              <button type="button" className="secondary" onClick={() => setAskNiimbot(false)}>
+                Нет, остаться на печати меток
               </button>
             </div>
           </div>

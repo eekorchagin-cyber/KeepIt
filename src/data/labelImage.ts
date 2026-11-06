@@ -212,8 +212,11 @@ export function safeFileName(name: string): string {
   return name.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'метка'
 }
 
+/** Результат «Поделиться» / скачивания: отмена — пользователь закрыл лист без сохранения. */
+export type ShareResult = 'shared' | 'downloaded' | 'cancelled'
+
 /** Отдать картинки через «Поделиться» (на телефоне — «Сохранить изображения»), иначе скачать. */
-export function shareLabelImages(labels: Array<{ name: string; blob: Blob }>): Promise<'shared' | 'downloaded'> {
+export function shareLabelImages(labels: Array<{ name: string; blob: Blob }>): Promise<ShareResult> {
   return shareFiles(
     labels.map(
       (label, index) =>
@@ -223,13 +226,13 @@ export function shareLabelImages(labels: Array<{ name: string; blob: Blob }>): P
 }
 
 /** «Поделиться» файлами (на телефоне — «Сохранить в Файлы» / «Сохранить изображения»), иначе скачать. */
-export async function shareFiles(files: File[]): Promise<'shared' | 'downloaded'> {
+export async function shareFiles(files: File[]): Promise<ShareResult> {
   if (typeof navigator.canShare === 'function' && navigator.canShare({ files })) {
     try {
       await navigator.share({ files, title: 'Метки KeepIt' })
       return 'shared'
     } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') return 'shared'
+      if (err instanceof DOMException && err.name === 'AbortError') return 'cancelled'
       // иначе — обычное скачивание
     }
   }

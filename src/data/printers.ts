@@ -174,6 +174,35 @@ export function findPrinter(id: string | null | undefined): PrinterProfile {
   return PRINTERS.find((printer) => printer.id === id) ?? PRINTERS[0]!
 }
 
+/** Принтер из линейки NIIMBOT — печать через фирменное приложение после сохранения картинок. */
+export function isNiimbotPrinter(printer: PrinterProfile | string | null | undefined): boolean {
+  const id = typeof printer === 'string' ? printer : printer?.id
+  return Boolean(id?.startsWith('niimbot-'))
+}
+
+/**
+ * Открыть приложение NIIMBOT (или магазин, если не установлено).
+ * На Android — intent с fallback в Play Store; на iOS — схема niimbot://, иначе App Store.
+ */
+export function openNiimbotApp(): void {
+  if (typeof window === 'undefined') return
+  const android = /Android/i.test(navigator.userAgent)
+  if (android) {
+    window.location.href =
+      'intent://#Intent;package=com.gengcon.android.jccloudprinter;scheme=niimbot;' +
+      'S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dcom.gengcon.android.jccloudprinter;end'
+    return
+  }
+  const storeUrl = 'https://apps.apple.com/app/id1359104615'
+  const started = Date.now()
+  window.location.href = 'niimbot://'
+  window.setTimeout(() => {
+    if (document.visibilityState === 'visible' && Date.now() - started < 2500) {
+      window.location.href = storeUrl
+    }
+  }, 1200)
+}
+
 export function sizeLabel(size: LabelSize): string {
   return `${size.widthMm}×${size.heightMm} мм`
 }
