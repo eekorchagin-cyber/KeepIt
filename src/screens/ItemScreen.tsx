@@ -6,11 +6,59 @@ import { ServicePanel } from '../components/ServicePanel'
 import { ItemQrPanel } from '../components/ItemQrPanel'
 import { AssignedCodes } from '../components/AssignedCodes'
 import { MoveItemSheet } from '../components/MoveItemSheet'
+import { ScanCodeSheet } from '../components/ScanCodeSheet'
 import { formatLentDate, isItemLent } from '../data/repository'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { formatQty } from '../data/units'
 import { PLACE_TYPES, canNest } from '../data/placeTypes'
-import type { PlaceType } from '../types'
+import type { Item, PlaceType } from '../types'
+
+/** Заводские / присвоенные коды вещи + кнопка присвоить штрихкод или QR */
+function ItemCodesPanel({ state, item }: { state: KeepItState; item: Item }) {
+  const [scanning, setScanning] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function assign(raw: string) {
+    setBusy(true)
+    setError(null)
+    try {
+      await state.assignCode(raw, { kind: 'item', id: item.id })
+      setScanning(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось присвоить код')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="panel stack">
+      <strong>Штрих-код или QR на вещи</strong>
+      <span className="muted">
+        Заводской код можно присвоить карточке — скан откроет эту вещь. Напечатанная метка KeepIt — всегда отдельный
+        QR программы.
+      </span>
+      {item.extraCodes?.length ? (
+        <AssignedCodes state={state} target={{ kind: 'item', id: item.id }} codes={item.extraCodes} />
+      ) : (
+        <span className="muted">Пока присвоенных заводских кодов нет.</span>
+      )}
+      {error ? <p className="error">{error}</p> : null}
+      <button type="button" className="secondary" disabled={busy} onClick={() => setScanning(true)}>
+        Присвоить штрих-код или QR
+      </button>
+      {scanning ? (
+        <ScanCodeSheet
+          title="Код вещи"
+          hint="Наведите камеру на заводской штрихкод или QR — или введите код вручную."
+          onCapture={(raw) => void assign(raw)}
+          onClose={() => setScanning(false)}
+        />
+      ) : null}
+    </div>
+  )
+}
 
 function todayLocal(): string {
   const d = new Date()
@@ -276,11 +324,7 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
 
       <ServicePanel key={item.id} state={state} item={item} />
       <ItemQrPanel key={`qr-${item.id}`} state={state} item={item} />
-      {item.extraCodes?.length ? (
-        <div className="panel">
-          <AssignedCodes state={state} target={{ kind: 'item', id: item.id }} codes={item.extraCodes} />
-        </div>
-      ) : null}
+      <ItemCodesPanel state={state} item={item} />
 
       {!item.needsFill ? (
         <div className="panel stack">

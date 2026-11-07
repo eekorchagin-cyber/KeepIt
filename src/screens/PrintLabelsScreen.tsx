@@ -572,12 +572,30 @@ export function PrintLabelsScreen({
    * Системное окно печати. На iPhone Safari открывает его, только если печать вызвана прямо в нажатии,
    * без ожидания, — поэтому страницы печати готовятся заранее (printJob), а здесь только window.print().
    */
+  /** Id вещей среди меток — после печати/сохранения отмечаем, что метка KeepIt уже использовалась */
+  function itemIdsIn(labels: Array<{ id: string }>): string[] {
+    return labels
+      .map((label) => label.id)
+      .filter((id) => Boolean(state.findItem(id) ?? state.allItems.find((entry) => entry.id === id)))
+  }
+
+  async function noteKeepitLabelsPrinted(labels: Array<{ id: string }>) {
+    const ids = itemIdsIn(labels)
+    if (!ids.length) return
+    try {
+      await state.markKeepitLabelsPrinted(ids)
+    } catch {
+      /* печать уже прошла — отметку можно проставить позже */
+    }
+  }
+
   function printNow() {
     if (!printJob || printJob.key !== printSetKey) {
       setError('Метки ещё готовятся — нажмите «Печать» через секунду.')
       return
     }
     window.print()
+    void noteKeepitLabelsPrinted(printList)
   }
 
   function onMainClick(target: OutputTarget) {
@@ -638,6 +656,7 @@ export function PrintLabelsScreen({
           ? 'Картинки переданы. Теперь откройте приложение принтера и напечатайте их (шаги выше).'
           : 'Картинки скачаны. Откройте их в приложении принтера (шаги выше).',
       )
+      await noteKeepitLabelsPrinted(images)
       if (isNiimbotPrinter(printer)) setAskNiimbot(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось сохранить картинки')
@@ -662,6 +681,7 @@ export function PrintLabelsScreen({
             ? 'PDF передан. Чтобы сохранить его, выберите «Сохранить в Файлы».'
             : 'PDF скачан в «Загрузки».',
       )
+      if (pdfPurpose === 'print') await noteKeepitLabelsPrinted(printList)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось сохранить PDF')
     }
