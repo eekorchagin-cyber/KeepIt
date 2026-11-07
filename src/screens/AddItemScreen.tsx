@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CategoryPicker } from '../components/CategoryPicker'
 import { ChoiceSelect } from '../components/ChoiceSelect'
 import { MODE_OPTIONS } from '../data/modes'
@@ -6,6 +6,12 @@ import type { KeepItState } from '../hooks/useKeepIt'
 import { findName } from '../data/itemNames'
 import { normalizeSearch } from '../data/repository'
 import { scanKey } from '../data/placeCodes'
+import {
+  lookupProductByBarcode,
+  parseGtinBarcode,
+  productLookupSourceLabel,
+  type ProductLookupResult,
+} from '../data/productLookup'
 import { unitForMode, unitOptionsFor } from '../data/units'
 import { ChoosePlaceSheet } from '../components/MoveItemSheet'
 import { ScanCodeSheet } from '../components/ScanCodeSheet'
@@ -13,6 +19,13 @@ import { AutoGrowInput } from '../components/AutoGrowInput'
 import { PlaceTypeIcon } from '../components/PlaceTypeIcon'
 import { PLACE_TYPES, canNest } from '../data/placeTypes'
 import type { AccountingMode, PlaceType, UnitCode } from '../types'
+
+type LookupStatus =
+  | { state: 'idle' }
+  | { state: 'loading' }
+  | { state: 'found'; result: ProductLookupResult }
+  | { state: 'miss' }
+  | { state: 'skipped' }
 
 /** После выбора подсказки список исчезает — «click» того же касания не должен попасть в поле под пальцем */
 function swallowNextClick() {
@@ -46,6 +59,39 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
   const [error, setError] = useState<string | null>(null)
   /** Подсказки видны, только пока набирают название: после ввода — да, после ухода из поля или выбора — нет */
   const [typingName, setTypingName] = useState(false)
+  const [lookup, setLookup] = useState<LookupStatus>({ state: 'idle' })
+  /** Название подставлено из базы — при новом скане можно заменить; ручной ввод защищён */
+  const nameFromLookupRef = useRef(false)
+  const nameRef = useRef(name)
+  nameRef.current = name
+
+  useEffect(() => {
+    if (!pendingCode || kind !== 'item') {
+      setLookup({ state: 'idle' })
+      return
+    }
+    if (!parseGtinBarcode(pendingCode)) {
+      setLookup({ state: 'skipped' })
+      return
+    }
+    const controller = new AbortController()
+    setLookup({ state: 'loading' })
+    void lookupProductByBarcode(pendingCode, controller.signal).then((result) => {
+      if (controller.signal.aborted) return
+      if (!result) {
+        setLookup({ state: 'miss' })
+        return
+      }
+      setLookup({ state: 'found', result })
+      const current = nameRef.current.trim()
+      if (!current || nameFromLookupRef.current) {
+        onNameChange(result.name, true)
+      }
+    })
+    return () => controller.abort()
+    // onNameChange стабилен по смыслу; category внутри него читается из замыкания
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingCode, kind])
 
   if (!place) {
     return (
@@ -90,7 +136,8 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
     setTypingName(false)
   }
 
-  function onNameChange(value: string) {
+  function onNameChange(value: string, fromLookup = false) {
+    nameFromLookupRef.current = fromLookup
     setName(value)
     const known = findName(state.itemNames, value)
     if (!known?.category || category.trim()) return
@@ -98,6 +145,10 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
     setSubcategory(known.subcategory)
     setMode(known.mode)
     setUnit(unitForMode(known.mode, known.unit))
+  }
+
+  function applyLookupName(result: ProductLookupResult) {
+    onNameChange(result.name, true)
   }
 
   async function save(andAnother: boolean) {
@@ -128,6 +179,8 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
       }
       if (andAnother) {
         setName('')
+        nameFromLookupRef.current = false
+        setLookup({ state: 'idle' })
         setNote('')
         setQuantity('1')
       } else {
@@ -189,6 +242,30 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
             {codeOwnerName ? (
               <span className="muted">Сейчас код присвоен «{codeOwnerName}» — при сохранении перейдёт к новой карточке.</span>
             ) : null}
+            {kind === 'item' && lookup.state === 'loading' ? (
+              <span className="muted">Ищу название товара по штрихкоду…</span>
+            ) : null}
+            {kind === 'item' && lookup.state === 'found' ? (
+              <div className="stack-tight">
+                <span className="scan-feedback ok">
+                  Название из {productLookupSourceLabel(lookup.result.source)}: «{lookup.result.name}»
+                </span>
+                {name.trim() !== lookup.result.name ? (
+                  <button type="button" className="secondary" onClick={() => applyLookupName(lookup.result)}>
+                    Подставить это название
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+            {kind === 'item' && lookup.state === 'miss' ? (
+              <span className="muted">В открытых базах товар не найден — введите название сами.</span>
+            ) : null}
+            {kind === 'item' && lookup.state === 'skipped' ? (
+              <span className="muted">
+                Автопоиск названия работает для заводских EAN/UPC (цифровой штрихкод). Для этого кода введите название
+                вручную.
+              </span>
+            ) : null}
             <div className="split-row">
               <button type="button" className={kind === 'item' ? undefined : 'secondary'} onClick={() => setKind('item')}>
                 Вещь
@@ -205,7 +282,14 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
               <button type="button" className="secondary" onClick={() => setScanningCode(true)}>
                 Сканировать другой
               </button>
-              <button type="button" className="ghost" onClick={() => setPendingCode(null)}>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => {
+                  setPendingCode(null)
+                  setLookup({ state: 'idle' })
+                }}
+              >
                 Убрать код
               </button>
             </div>
@@ -221,8 +305,9 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
           <>
             <strong>Штрих-код или QR на вещи</strong>
             <span className="muted">
-              Если у вещи уже есть заводской штрихкод или QR — присвойте его карточке: потом скан откроет эту вещь.
-              Напечатанная метка KeepIt всегда будет QR программы, не копией заводского кода.
+              Если у вещи уже есть заводской штрихкод или QR — присвойте его карточке: потом скан откроет эту вещь. Для
+              EAN/UPC программа попробует подставить название из открытых баз товаров. Напечатанная метка KeepIt всегда
+              QR программы, не копия заводского кода.
             </span>
             <button type="button" className="secondary" onClick={() => setScanningCode(true)}>
               Присвоить штрих-код или QR
