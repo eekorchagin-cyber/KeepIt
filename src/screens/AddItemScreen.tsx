@@ -6,6 +6,7 @@ import type { KeepItState } from '../hooks/useKeepIt'
 import { findName } from '../data/itemNames'
 import { normalizeSearch } from '../data/repository'
 import { scanKey } from '../data/placeCodes'
+import { openExternalUrl } from '../data/openExternal'
 import {
   lookupProductByBarcode,
   parseGtinBarcode,
@@ -256,8 +257,7 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
                   type="button"
                   className="secondary"
                   onClick={() => {
-                    const q = encodeURIComponent(pendingCode)
-                    window.open(`https://www.google.com/search?q=${q}`, '_blank', 'noopener,noreferrer')
+                    openExternalUrl(`https://www.google.com/search?q=${encodeURIComponent(pendingCode)}`)
                   }}
                 >
                   Искать этот код в Google
