@@ -6,6 +6,7 @@ import type { KeepItState } from '../hooks/useKeepIt'
 import { findName } from '../data/itemNames'
 import { normalizeSearch } from '../data/repository'
 import { scanKey } from '../data/placeCodes'
+import { clearAddItemDraft, readAddItemDraft, writeAddItemDraft } from '../data/addItemDraft'
 import { openExternalUrl } from '../data/openExternal'
 import {
   lookupProductByBarcode,
@@ -40,29 +41,36 @@ function swallowNextClick() {
 }
 
 export function AddItemScreen({ state, placeId, code }: { state: KeepItState; placeId: string; code?: string }) {
-  const [targetPlaceId, setTargetPlaceId] = useState(placeId)
+  /** Черновик после ухода в Google на iPhone (location.assign) — восстанавливаем при возврате */
+  const [draft] = useState(() => {
+    const saved = readAddItemDraft(placeId)
+    if (saved) clearAddItemDraft()
+    return saved
+  })
+
+  const [targetPlaceId, setTargetPlaceId] = useState(draft?.targetPlaceId ?? placeId)
   const place = state.findPlace(targetPlaceId)
   /** Заводской QR/штрихкод или код со сканера: присвоится сохранённой вещи или новому месту */
-  const [pendingCode, setPendingCode] = useState(code ?? null)
+  const [pendingCode, setPendingCode] = useState(draft?.pendingCode ?? code ?? null)
   const [scanningCode, setScanningCode] = useState(false)
-  const [kind, setKind] = useState<'item' | 'place'>('item')
+  const [kind, setKind] = useState<'item' | 'place'>(draft?.kind ?? 'item')
   const [choosingPlace, setChoosingPlace] = useState(false)
   const placeTypes = place ? PLACE_TYPES.filter((option) => canNest(place.type, option.value)) : []
-  const [placeType, setPlaceType] = useState<PlaceType>('box')
-  const [name, setName] = useState('')
-  const [mode, setMode] = useState<AccountingMode>('durable')
-  const [category, setCategory] = useState('')
-  const [subcategory, setSubcategory] = useState('')
-  const [unit, setUnit] = useState<UnitCode>('pcs')
-  const [quantity, setQuantity] = useState('1')
-  const [note, setNote] = useState('')
+  const [placeType, setPlaceType] = useState<PlaceType>(draft?.placeType ?? 'box')
+  const [name, setName] = useState(draft?.name ?? '')
+  const [mode, setMode] = useState<AccountingMode>(draft?.mode ?? 'durable')
+  const [category, setCategory] = useState(draft?.category ?? '')
+  const [subcategory, setSubcategory] = useState(draft?.subcategory ?? '')
+  const [unit, setUnit] = useState<UnitCode>(draft?.unit ?? 'pcs')
+  const [quantity, setQuantity] = useState(draft?.quantity ?? '1')
+  const [note, setNote] = useState(draft?.note ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   /** Подсказки видны, только пока набирают название: после ввода — да, после ухода из поля или выбора — нет */
   const [typingName, setTypingName] = useState(false)
   const [lookup, setLookup] = useState<LookupStatus>({ state: 'idle' })
   /** Название подставлено из базы — при новом скане можно заменить; ручной ввод защищён */
-  const nameFromLookupRef = useRef(false)
+  const nameFromLookupRef = useRef(Boolean(draft?.nameFromLookup))
   const nameRef = useRef(name)
   nameRef.current = name
 
@@ -152,6 +160,29 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
     onNameChange(result.name, true)
   }
 
+  function persistDraft() {
+    writeAddItemDraft({
+      placeId,
+      targetPlaceId,
+      pendingCode,
+      kind,
+      placeType,
+      name,
+      mode,
+      category,
+      subcategory,
+      unit,
+      quantity,
+      note,
+      nameFromLookup: nameFromLookupRef.current,
+    })
+  }
+
+  function openGoogleForCode(raw: string) {
+    persistDraft()
+    openExternalUrl(`https://www.google.com/search?q=${encodeURIComponent(raw)}`)
+  }
+
   async function save(andAnother: boolean) {
     setBusy(true)
     setError(null)
@@ -178,6 +209,7 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
         await state.assignCode(pendingCode, { kind: 'item', id: item.id })
         setPendingCode(null)
       }
+      clearAddItemDraft()
       if (andAnother) {
         setName('')
         nameFromLookupRef.current = false
@@ -206,6 +238,7 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
       if (!type) throw new Error(`В «${place.name}» нельзя создать место — выберите другое`)
       const created = await state.createChildPlace(place.id, name.trim(), type)
       await state.assignCode(pendingCode, { kind: 'place', id: created.id })
+      clearAddItemDraft()
       state.replaceScreen({ name: 'place', placeId: created.id })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка')
@@ -253,13 +286,7 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
             {kind === 'item' && lookup.state === 'miss' ? (
               <div className="stack-tight">
                 <span className="muted">В открытых базах товар не найден — введите название сами.</span>
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => {
-                    openExternalUrl(`https://www.google.com/search?q=${encodeURIComponent(pendingCode)}`)
-                  }}
-                >
+                <button type="button" className="secondary" onClick={() => openGoogleForCode(pendingCode)}>
                   Искать этот код в Google
                 </button>
               </div>
