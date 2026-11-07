@@ -309,8 +309,12 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
               className="ghost assigned-codes-toggle"
               onClick={() => state.replaceScreen({ name: 'assign-code', code: pendingCode })}
             >
-              Это уже есть в KeepIt — присвоить код существующей вещи или месту
+              Вещь или место уже есть в KeepIt — присвоить им этот код
             </button>
+            <span className="muted">
+              Не создаёт новую карточку: открывает выбор уже заведённой вещи или места и привязывает к ней только что
+              отсканированный код. Если код уже был у кого-то другого — об этом сказано выше.
+            </span>
           </>
         ) : (
           <>
