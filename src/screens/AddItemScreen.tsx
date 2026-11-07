@@ -234,14 +234,6 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
           <>
             <span className="muted">Код для присвоения</span>
             <strong className="assign-code-value">{shownCode}</strong>
-            <span className="muted">
-              При сохранении он будет присвоен {kind === 'item' ? 'новой вещи' : 'новому месту хранения'} — потом
-              скан этого кода откроет {kind === 'item' ? 'её карточку' : 'это место'}. Если позже напечатаете метку
-              KeepIt, на этикетке будет QR программы — им тоже можно будет открывать вещь.
-            </span>
-            {codeOwnerName ? (
-              <span className="muted">Сейчас код присвоен «{codeOwnerName}» — при сохранении перейдёт к новой карточке.</span>
-            ) : null}
             {kind === 'item' && lookup.state === 'loading' ? (
               <span className="muted">Ищу название товара по штрихкоду…</span>
             ) : null}
@@ -258,13 +250,32 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
               </div>
             ) : null}
             {kind === 'item' && lookup.state === 'miss' ? (
-              <span className="muted">В открытых базах товар не найден — введите название сами.</span>
+              <div className="stack-tight">
+                <span className="muted">В открытых базах товар не найден — введите название сами.</span>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    const q = encodeURIComponent(pendingCode)
+                    window.open(`https://www.google.com/search?q=${q}`, '_blank', 'noopener,noreferrer')
+                  }}
+                >
+                  Искать этот код в Google
+                </button>
+              </div>
             ) : null}
             {kind === 'item' && lookup.state === 'skipped' ? (
               <span className="muted">
                 Автопоиск названия работает для заводских EAN/UPC (цифровой штрихкод). Для этого кода введите название
                 вручную.
               </span>
+            ) : null}
+            <span className="muted">
+              При сохранении код будет присвоен {kind === 'item' ? 'новой вещи' : 'новому месту хранения'} — потом его
+              скан откроет {kind === 'item' ? 'карточку' : 'это место'}. Напечатанная метка KeepIt — всегда QR программы.
+            </span>
+            {codeOwnerName ? (
+              <span className="muted">Сейчас код присвоен «{codeOwnerName}» — при сохранении перейдёт к новой карточке.</span>
             ) : null}
             <div className="split-row">
               <button type="button" className={kind === 'item' ? undefined : 'secondary'} onClick={() => setKind('item')}>
