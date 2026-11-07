@@ -271,6 +271,9 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
               </span>
             ) : null}
             <span className="muted">
+              Код определён. Теперь заполните данные об объекте в карточке и сохраните данные.
+            </span>
+            <span className="muted">
               При сохранении код будет присвоен {kind === 'item' ? 'новой вещи' : 'новому месту хранения'} — потом его
               скан откроет {kind === 'item' ? 'карточку' : 'это место'}. Напечатанная метка KeepIt — всегда QR программы.
             </span>
@@ -311,10 +314,6 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
             >
               Вещь или место уже есть в KeepIt — присвоить им этот код
             </button>
-            <span className="muted">
-              Не создаёт новую карточку: открывает выбор уже заведённой вещи или места и привязывает к ней только что
-              отсканированный код. Если код уже был у кого-то другого — об этом сказано выше.
-            </span>
           </>
         ) : (
           <>
