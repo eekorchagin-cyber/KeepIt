@@ -15,6 +15,7 @@ import {
   changePlaceType,
   assignScanCode,
   unassignScanCode,
+  markItemsKeepitLabelPrinted,
   type CodeTarget,
   type InventoryApply,
   assignCategory,
@@ -188,6 +189,8 @@ export type KeepItState = {
   /** Присвоить отсканированный код (свободная метка, чужой QR, штрихкод) вещи или месту */
   assignCode: (raw: string, target: CodeTarget) => Promise<void>
   unassignCode: (target: CodeTarget, key: string) => Promise<void>
+  /** После печати метки вещи: основной код — QR KeepIt */
+  markKeepitLabelsPrinted: (itemIds: string[]) => Promise<void>
   removePlace: (placeId: string) => Promise<void>
   createItem: (input: {
     placeId: string
@@ -557,6 +560,10 @@ export function useKeepIt(): KeepItState {
     },
     unassignCode: async (target, key) => {
       await unassignScanCode(target, key)
+      await refresh()
+    },
+    markKeepitLabelsPrinted: async (itemIds) => {
+      await markItemsKeepitLabelPrinted(itemIds)
       await refresh()
     },
     changeType: async (placeId, type) => {

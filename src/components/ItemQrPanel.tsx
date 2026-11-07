@@ -5,11 +5,13 @@ import { itemUrl } from '../data/placeCodes'
 import type { Item } from '../types'
 
 /**
- * QR-код вещи: сканер KeepIt открывает её карточку, а в «Перенести сюда» — выбирает её для переноса.
- * Печать метки — тот же экран и параметры принтера, что «Действия → Печать меток».
+ * QR-код вещи (метка KeepIt): сканер открывает карточку, «Перенести сюда» выбирает вещь.
+ * Печать — всегда этот QR программы, даже если вещи присвоен заводской штрихкод.
  */
 export function ItemQrPanel({ state, item }: { state: KeepItState; item: Item }) {
-  const [open, setOpen] = useState(false)
+  const hasFactoryCode = Boolean(item.extraCodes?.length)
+  const printed = Boolean(item.keepitLabelPrintedAt)
+  const [open, setOpen] = useState(printed || !hasFactoryCode)
   const [qr, setQr] = useState<string | null>(null)
   const url = itemUrl(item.id)
 
@@ -27,15 +29,18 @@ export function ItemQrPanel({ state, item }: { state: KeepItState; item: Item })
   return (
     <div className="panel stack">
       <button type="button" className="ghost crumb" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
-        {open ? 'Скрыть QR-код вещи' : 'QR-код вещи'}
+        {open ? 'Скрыть QR-код KeepIt' : printed ? 'QR-код KeepIt (метка напечатана)' : 'QR-код KeepIt'}
       </button>
       {open ? (
         <>
           <div className="item-qr">
             {qr ? <img src={qr} alt={`QR-код вещи «${item.name}»`} width={140} height={140} /> : null}
             <span className="muted">
-              Наклейте метку на вещь: сканер KeepIt откроет эту карточку, а в «Перенести сюда» вещь выберется для
-              переноса.
+              {printed
+                ? 'Метка KeepIt уже печаталась: сканируйте этот QR — откроется карточка. Заводской штрихкод, если был присвоен, тоже продолжает открывать вещь.'
+                : hasFactoryCode
+                  ? 'Сейчас вещь можно открыть по присвоенному заводскому коду. Напечатанная метка будет QR KeepIt (как здесь), а не копией заводского штрихкода — после печати этим QR тоже можно идентифицировать вещь.'
+                  : 'Наклейте метку на вещь: сканер KeepIt откроет эту карточку, а в «Перенести сюда» вещь выберется для переноса.'}
             </span>
           </div>
           <button
@@ -44,7 +49,7 @@ export function ItemQrPanel({ state, item }: { state: KeepItState; item: Item })
           >
             Напечатать метку вещи
           </button>
-          <span className="muted">Откроется печать с выбором принтера — как в «Действия → Печать меток».</span>
+          <span className="muted">Откроется печать с выбором принтера — на этикетке всегда QR KeepIt.</span>
         </>
       ) : null}
     </div>

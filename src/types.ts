@@ -111,6 +111,11 @@ export type Item = {
   serviceIntervalMonths?: number
   /** Присвоенные коды: свободные метки, чужие QR и штрихкоды (ключи scanKey) */
   extraCodes?: string[]
+  /**
+   * Когда напечатали метку KeepIt (QR со ссылкой на карточку): после этого основным кодом
+   * для поиска вещи считается QR программы; заводской штрихкод в extraCodes по-прежнему открывает карточку.
+   */
+  keepitLabelPrintedAt?: string
   visibility: 'shared' | 'personal'
   version: number
   updatedAt: string

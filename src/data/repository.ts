@@ -620,6 +620,30 @@ export async function unassignScanCode(target: CodeTarget, key: string): Promise
   }
 }
 
+/**
+ * Отметить, что для вещей напечатана метка KeepIt (QR программы).
+ * После этого в карточке основной код — QR KeepIt; заводские коды в extraCodes остаются рабочими.
+ */
+export async function markItemsKeepitLabelPrinted(itemIds: string[]): Promise<number> {
+  const ids = [...new Set(itemIds.filter(Boolean))]
+  if (!ids.length) return 0
+  const at = nowIso()
+  const items = (await db.items.bulkGet(ids)).filter((item): item is Item => Boolean(item))
+  let changed = 0
+  for (const item of items) {
+    if (item.keepitLabelPrintedAt) continue
+    await db.items.put({
+      ...item,
+      keepitLabelPrintedAt: at,
+      version: item.version + 1,
+      updatedAt: at,
+      syncStatus: 'pending',
+    })
+    changed += 1
+  }
+  return changed
+}
+
 export async function renamePlace(placeId: string, name: string): Promise<Place> {
   const place = await getPlace(placeId)
   if (!place) throw new Error('Место не найдено')

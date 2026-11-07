@@ -5,8 +5,10 @@ import { MODE_OPTIONS } from '../data/modes'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { findName } from '../data/itemNames'
 import { normalizeSearch } from '../data/repository'
+import { scanKey } from '../data/placeCodes'
 import { unitForMode, unitOptionsFor } from '../data/units'
 import { ChoosePlaceSheet } from '../components/MoveItemSheet'
+import { ScanCodeSheet } from '../components/ScanCodeSheet'
 import { AutoGrowInput } from '../components/AutoGrowInput'
 import { PlaceTypeIcon } from '../components/PlaceTypeIcon'
 import { PLACE_TYPES, canNest } from '../data/placeTypes'
@@ -26,8 +28,9 @@ function swallowNextClick() {
 export function AddItemScreen({ state, placeId, code }: { state: KeepItState; placeId: string; code?: string }) {
   const [targetPlaceId, setTargetPlaceId] = useState(placeId)
   const place = state.findPlace(targetPlaceId)
-  /** Незнакомый отсканированный код: присваивается первой сохранённой вещи или новому месту */
+  /** Заводской QR/штрихкод или код со сканера: присвоится сохранённой вещи или новому месту */
   const [pendingCode, setPendingCode] = useState(code ?? null)
+  const [scanningCode, setScanningCode] = useState(false)
   const [kind, setKind] = useState<'item' | 'place'>('item')
   const [choosingPlace, setChoosingPlace] = useState(false)
   const placeTypes = place ? PLACE_TYPES.filter((option) => canNest(place.type, option.value)) : []
@@ -162,37 +165,83 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
     .map((part) => part.name)
     .join(' / ')
   const shownCode = pendingCode && pendingCode.length > 80 ? `${pendingCode.slice(0, 80)}…` : pendingCode
+  const pendingKey = pendingCode ? scanKey(pendingCode) : ''
+  const codeOwnerPlace = pendingKey
+    ? state.places.find((entry) => entry.extraCodes?.includes(pendingKey))
+    : undefined
+  const codeOwnerItem = pendingKey
+    ? state.allItems.find((entry) => entry.extraCodes?.includes(pendingKey))
+    : undefined
+  const codeOwnerName = codeOwnerItem?.name ?? codeOwnerPlace?.name
 
   return (
     <div className="stack">
-      {pendingCode ? (
-        <div className="panel stack-tight">
-          <span className="muted">Отсканирован новый код</span>
-          <strong className="assign-code-value">{shownCode}</strong>
-          <span className="muted">
-            Он будет присвоен {kind === 'item' ? 'новой вещи' : 'новому месту хранения'} — потом его скан откроет{' '}
-            {kind === 'item' ? 'её карточку' : 'это место'}.
-          </span>
-          <div className="split-row">
-            <button type="button" className={kind === 'item' ? undefined : 'secondary'} onClick={() => setKind('item')}>
-              Вещь
-            </button>
+      <div className="panel stack-tight">
+        {pendingCode ? (
+          <>
+            <span className="muted">Код для присвоения</span>
+            <strong className="assign-code-value">{shownCode}</strong>
+            <span className="muted">
+              При сохранении он будет присвоен {kind === 'item' ? 'новой вещи' : 'новому месту хранения'} — потом
+              скан этого кода откроет {kind === 'item' ? 'её карточку' : 'это место'}. Если позже напечатаете метку
+              KeepIt, на этикетке будет QR программы — им тоже можно будет открывать вещь.
+            </span>
+            {codeOwnerName ? (
+              <span className="muted">Сейчас код присвоен «{codeOwnerName}» — при сохранении перейдёт к новой карточке.</span>
+            ) : null}
+            <div className="split-row">
+              <button type="button" className={kind === 'item' ? undefined : 'secondary'} onClick={() => setKind('item')}>
+                Вещь
+              </button>
+              <button
+                type="button"
+                className={kind === 'place' ? undefined : 'secondary'}
+                onClick={() => setKind('place')}
+              >
+                Место хранения
+              </button>
+            </div>
+            <div className="row wrap">
+              <button type="button" className="secondary" onClick={() => setScanningCode(true)}>
+                Сканировать другой
+              </button>
+              <button type="button" className="ghost" onClick={() => setPendingCode(null)}>
+                Убрать код
+              </button>
+            </div>
             <button
               type="button"
-              className={kind === 'place' ? undefined : 'secondary'}
-              onClick={() => setKind('place')}
+              className="ghost assigned-codes-toggle"
+              onClick={() => state.replaceScreen({ name: 'assign-code', code: pendingCode })}
             >
-              Место хранения
+              Это уже есть в KeepIt — присвоить код существующей вещи или месту
             </button>
-          </div>
-          <button
-            type="button"
-            className="ghost assigned-codes-toggle"
-            onClick={() => state.replaceScreen({ name: 'assign-code', code: pendingCode })}
-          >
-            Это уже есть в KeepIt — присвоить код существующей вещи или месту
-          </button>
-        </div>
+          </>
+        ) : (
+          <>
+            <strong>Штрих-код или QR на вещи</strong>
+            <span className="muted">
+              Если у вещи уже есть заводской штрихкод или QR — присвойте его карточке: потом скан откроет эту вещь.
+              Напечатанная метка KeepIt всегда будет QR программы, не копией заводского кода.
+            </span>
+            <button type="button" className="secondary" onClick={() => setScanningCode(true)}>
+              Присвоить штрих-код или QR
+            </button>
+          </>
+        )}
+      </div>
+
+      {scanningCode ? (
+        <ScanCodeSheet
+          title="Код вещи"
+          hint="Наведите камеру на заводской штрихкод или QR на вещи — или введите код вручную."
+          onCapture={(raw) => {
+            setPendingCode(raw.trim())
+            setKind('item')
+            setScanningCode(false)
+          }}
+          onClose={() => setScanningCode(false)}
+        />
       ) : null}
 
       {choosingPlace ? (
