@@ -1117,6 +1117,13 @@ html[data-theme='dark'] .scan-feedback.fail {
   gap: 4px;
 }
 
+.nfc-url {
+  display: block;
+  word-break: break-all;
+  font-size: 0.85em;
+  line-height: 1.35;
+}
+
 .assign-code-value {
   overflow-wrap: anywhere;
 }
