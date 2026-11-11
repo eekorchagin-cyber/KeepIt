@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { itemUrl } from '../data/placeCodes'
+import { NfcLinkPanel } from './NfcLinkPanel'
 import type { Item } from '../types'
 
 /**
@@ -50,6 +51,7 @@ export function ItemQrPanel({ state, item }: { state: KeepItState; item: Item })
             Напечатать метку вещи
           </button>
           <span className="muted">Откроется печать с выбором принтера — на этикетке всегда QR KeepIt.</span>
+          <NfcLinkPanel url={url} label="вещи" />
         </>
       ) : null}
     </div>

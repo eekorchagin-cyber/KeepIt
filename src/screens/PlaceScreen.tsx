@@ -12,6 +12,7 @@ import { PLACE_TYPES, PLACE_TYPE_LABEL, PLACE_TYPE_SHORT, canNest } from '../dat
 import { PlaceTypeIcon } from '../components/PlaceTypeIcon'
 import { AssignedCodes } from '../components/AssignedCodes'
 import { placeUrl } from '../data/placeCodes'
+import { NfcLinkPanel } from '../components/NfcLinkPanel'
 import { requestAddPlace } from '../data/uiEvents'
 import type { Place } from '../types'
 
@@ -279,6 +280,9 @@ export function PlaceScreen({ state, placeId }: { state: KeepItState; placeId: s
           </div>
         ) : null}
         <AssignedCodes state={state} target={{ kind: 'place', id: place.id }} codes={place.extraCodes} />
+        <div className="panel">
+          <NfcLinkPanel url={placeUrl(place.id)} label="места" />
+        </div>
         {duplicates > 0 ? (
           <button
             type="button"
