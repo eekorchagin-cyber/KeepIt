@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { ObjectBadge } from '../components/ObjectBadge'
 import { objectLabelFromPlaces } from '../data/icons'
 import type { KeepItState } from '../hooks/useKeepIt'
@@ -5,6 +6,7 @@ import { PlaceTools } from '../components/PlaceTools'
 import { BadgeCountToggle } from '../components/BadgeCountToggle'
 import { FreeLabelsGroup } from '../components/FreeLabelsGroup'
 import { isUnusedFreeLabel } from '../data/repository'
+import { onLabelLinkNote } from '../data/labelProgram'
 import { PlaceTypeIcon } from '../components/PlaceTypeIcon'
 import type { ObjectKey } from '../types'
 
@@ -19,6 +21,11 @@ export function ObjectScreen({ state, objectKey }: { state: KeepItState; objectK
   }
   const freeLabels = children.filter(isUnusedFree)
   const rooms = children.filter((place) => !isUnusedFree(place))
+  const [linkNote, setLinkNote] = useState<string | null>(null)
+  useEffect(() => {
+    setLinkNote(null)
+    return onLabelLinkNote(setLinkNote)
+  }, [objectKey])
 
   return (
     <div className="stack screen-fill">
@@ -29,6 +36,11 @@ export function ObjectScreen({ state, objectKey }: { state: KeepItState; objectK
         </div>
         {root ? <PlaceTools state={state} place={root} /> : null}
       </div>
+      {linkNote ? (
+        <div className="panel">
+          <p className="muted">{linkNote}</p>
+        </div>
+      ) : null}
 
       <div className="panel stack">
         <BadgeCountToggle state={state} />

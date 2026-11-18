@@ -326,10 +326,6 @@ export function ImportListScreen({ state, placeId }: { state: KeepItState; place
             Создано коробок: {result.boxesCreated}. Добавлено вещей: {result.itemsCreated}
             {result.itemsMerged > 0 ? `. Сложено с имеющимися: ${result.itemsMerged}` : ''}.
           </p>
-          <p className="muted">
-            Названия добавлены в справочник. Следующий шаг — присвоить новым вещам категории: подсказки
-            уже подготовлены.
-          </p>
           {pending > 0 ? (
             <button type="button" onClick={() => state.jump({ name: 'categorize', placeId })}>
               Присвоить категории ({pending})
@@ -405,11 +401,7 @@ export function ImportListScreen({ state, placeId }: { state: KeepItState; place
       <div className="stack">
         <div className="panel stack">
           <strong>Проверьте список</strong>
-          <p className="muted">
-            Место: {place.name}. Снимите галочку, чтобы не добавлять строку. Название и количество можно
-            исправить. Неверно распознанный абзац можно переключить «коробка / отдельные вещи» или
-            убрать целиком.
-          </p>
+          <p className="muted">Место: {place.name}</p>
         </div>
 
         {blocks.map((block) => (
@@ -495,9 +487,7 @@ export function ImportListScreen({ state, placeId }: { state: KeepItState; place
       <div className="stack">
         <div className="panel stack">
           <strong>Из буфера</strong>
-          <p className="muted">
-            {clipboardHint ?? 'Вставьте список. Абзац со слова «Коробка» — коробка с содержимым, остальные — отдельные вещи.'}
-          </p>
+          {clipboardHint ? <p className="muted">{clipboardHint}</p> : null}
           <label className="field">
             Текст списка
             <textarea
@@ -532,15 +522,6 @@ export function ImportListScreen({ state, placeId }: { state: KeepItState; place
     <div className="stack">
       <div className="panel stack">
         <strong>Импорт списка в «{place.name}»</strong>
-        <p className="muted">
-          Абзац, начинающийся со слов «Короб» или «Коробка», станет коробкой: первое предложение — её
-          название, дальше вещи внутри. Остальные абзацы — отдельные вещи в этом месте. Вещи разделяются
-          точкой, количество — после двоеточия, числом или словом.
-        </p>
-        <p className="muted" style={{ whiteSpace: 'pre-line' }}>
-          Пример:{'\n'}
-          {PLACEHOLDER}
-        </p>
         <div className="hero-actions">
           <button
             type="button"

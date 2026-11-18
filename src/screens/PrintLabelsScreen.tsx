@@ -5,6 +5,7 @@ import { PlaceStepPicker } from '../components/PlaceStepPicker'
 import { ChoiceSelect } from '../components/ChoiceSelect'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { itemUrl, placeUrl } from '../data/placeCodes'
+import { copyLabelLink } from '../data/labelProgram'
 import { canHoldFreeLabels } from '../data/repository'
 import { renderLabelDataUrl, renderLabelPng, safeFileName, shareFiles, shareLabelImages } from '../data/labelImage'
 import { LABEL_DOTS_PER_MM, renderLabelsPdf } from '../data/labelPdf'
@@ -118,6 +119,7 @@ function writeStored(key: string, value: string) {
 
 /** Список меток: название, путь и QR-код. */
 function LabelList({ title, labels }: { title: string; labels: LabelView[] }) {
+  const [note, setNote] = useState<string | null>(null)
   return (
     <div className="stack">
       <strong>{title}</strong>
@@ -128,11 +130,15 @@ function LabelList({ title, labels }: { title: string; labels: LabelView[] }) {
             <span className="stack-tight">
               <strong>{label.name}</strong>
               {label.path ? <span className="place-code muted">{label.path}</span> : null}
+              <button type="button" className="ghost" onClick={() => setNote(copyLabelLink(label.url))}>
+                Скопировать ссылку
+              </button>
             </span>
             <img src={label.qrDataUrl} alt="" width={56} height={56} />
           </div>
         ))}
       </div>
+      {note ? <p className="muted">{note}</p> : null}
     </div>
   )
 }
@@ -1034,12 +1040,6 @@ export function PrintLabelsScreen({
             {pdfPurpose === 'print' ? 'Напечатать' : 'Сохранить PDF'}
           </button>
         ) : null}
-        {isAirPrint && !directPrint ? (
-          <p className="muted">
-            На iPhone печать идёт через меню «Поделиться»: «Подготовить к печати» → «Напечатать» → в меню
-            «Напечатать» — откроется окно AirPrint с выбором принтера.
-          </p>
-        ) : null}
         {images.length > 0 ? (
           <button type="button" onClick={() => void saveImages()}>
             Сохранить картинки ({images.length})
@@ -1071,11 +1071,7 @@ export function PrintLabelsScreen({
               </button>
             </div>
             <div className="stack">
-              <p className="muted">
-                Свободные метки — заготовки для будущих коробок. Пустые места «Свободная метка» появятся в
-                «{freeParentPath}» (одной строкой «Свободные метки» в списке), их метки напечатаются вместе с
-                выбранными. Название задаётся при первом сканировании.
-              </p>
+              <p className="muted">Появятся в «{freeParentPath}».</p>
               <label className="field">
                 Сколько свободных меток
                 <ChoiceSelect

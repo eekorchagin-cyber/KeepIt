@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { objectLabelFromPlaces } from '../data/icons'
 import { ModeCategory } from '../components/ModeCategory'
@@ -13,6 +13,7 @@ import { PlaceTypeIcon } from '../components/PlaceTypeIcon'
 import { AssignedCodes } from '../components/AssignedCodes'
 import { placeUrl } from '../data/placeCodes'
 import { NfcLinkPanel } from '../components/NfcLinkPanel'
+import { onLabelLinkNote } from '../data/labelProgram'
 import { requestAddPlace } from '../data/uiEvents'
 import type { Place } from '../types'
 
@@ -214,6 +215,11 @@ export function PlaceScreen({ state, placeId }: { state: KeepItState; placeId: s
   const uncategorized = state.uncategorizedItems(placeId).length
   const duplicates = state.duplicateGroups(placeId).length
   const [typeError, setTypeError] = useState<string | null>(null)
+  const [linkNote, setLinkNote] = useState<string | null>(null)
+  useEffect(() => {
+    setLinkNote(null)
+    return onLabelLinkNote(setLinkNote)
+  }, [placeId])
   if (!place) {
     return (
       <div className="panel stack">
@@ -264,6 +270,7 @@ export function PlaceScreen({ state, placeId }: { state: KeepItState; placeId: s
           </p>
         ) : null}
         {typeError ? <p className="error">{typeError}</p> : null}
+        {linkNote ? <p className="muted">{linkNote}</p> : null}
         {isUnusedFreeLabel(place) ? (
           <div className="place-banner stack-tight free-label-banner">
             <strong>Это свободная метка</strong>

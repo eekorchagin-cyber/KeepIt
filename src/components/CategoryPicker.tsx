@@ -99,7 +99,6 @@ export function CategorySheet({
               <button type="button" className="ghost crumb" onClick={() => setBrowseCategory(null)}>
                 ← Все категории
               </button>
-              <p className="muted">Выберите подкатегорию или оставьте только категорию</p>
               <div className="list">
                 {node?.children.map((child) => (
                   <button

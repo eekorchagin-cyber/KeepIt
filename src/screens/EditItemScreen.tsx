@@ -74,14 +74,7 @@ export function EditItemScreen({ state, itemId }: { state: KeepItState; itemId: 
     <div className="stack">
       <div className="panel stack">
         <strong>{filling ? 'Заполнить карточку' : 'Изменить карточку'}</strong>
-        {filling ? (
-          <p className="muted">
-            Укажите фактические данные. После сохранения метка «Требует заполнения» снимется, позиция
-            начнёт учитываться в остатках.
-          </p>
-        ) : null}
         <p className="muted">Место: {placePath}</p>
-        <p className="muted">Чтобы сменить место — сохраните карточку и нажмите «Перенести».</p>
 
         <label className="field">
           Название

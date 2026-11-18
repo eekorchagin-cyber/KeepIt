@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 import type { KeepItState } from '../hooks/useKeepIt'
 import { itemUrl } from '../data/placeCodes'
+import { copyLabelLink, onLabelLinkNote, publishLabelLinkNote } from '../data/labelProgram'
 import { NfcLinkPanel } from './NfcLinkPanel'
 import type { Item } from '../types'
 
@@ -14,7 +15,10 @@ export function ItemQrPanel({ state, item }: { state: KeepItState; item: Item })
   const printed = Boolean(item.keepitLabelPrintedAt)
   const [open, setOpen] = useState(printed || !hasFactoryCode)
   const [qr, setQr] = useState<string | null>(null)
+  const [linkNote, setLinkNote] = useState<string | null>(null)
   const url = itemUrl(item.id)
+
+  useEffect(() => onLabelLinkNote(setLinkNote), [])
 
   useEffect(() => {
     if (!open) return
@@ -32,6 +36,7 @@ export function ItemQrPanel({ state, item }: { state: KeepItState; item: Item })
       <button type="button" className="ghost crumb" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
         {open ? 'Скрыть QR-код KeepIt' : printed ? 'QR-код KeepIt (метка напечатана)' : 'QR-код KeepIt'}
       </button>
+      {!open && linkNote ? <p className="muted">{linkNote}</p> : null}
       {open ? (
         <>
           <div className="item-qr">
@@ -46,6 +51,18 @@ export function ItemQrPanel({ state, item }: { state: KeepItState; item: Item })
           </div>
           <button
             type="button"
+            onClick={() => {
+              const note = copyLabelLink(url)
+              setLinkNote(note)
+              publishLabelLinkNote(note)
+            }}
+          >
+            Скопировать ссылку
+          </button>
+          {linkNote ? <p className="muted">{linkNote}</p> : null}
+          <button
+            type="button"
+            className="secondary"
             onClick={() => state.navigate({ name: 'print', placeId: item.placeId, itemId: item.id })}
           >
             Напечатать метку вещи

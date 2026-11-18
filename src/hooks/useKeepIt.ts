@@ -32,6 +32,8 @@ import {
   deleteCategory,
   deletePlace,
   deleteSubcategory,
+  demoteCategory,
+  moveSubcategoryTo,
   getSettings,
   listItems,
   listPlaces,
@@ -172,6 +174,10 @@ export type KeepItState = {
   addSubcategory: (categoryName: string, name: string) => Promise<void>
   renameSubcategory: (categoryName: string, oldName: string, newName: string) => Promise<void>
   deleteSubcategory: (categoryName: string, name: string) => Promise<void>
+  /** Подкатегория переходит в другую категорию, не отрываясь от вещей */
+  moveSubcategory: (fromCategory: string, name: string, toCategory: string) => Promise<void>
+  /** Категория становится подкатегорией другой; уже указанная подкатегория вещи сохраняется */
+  demoteCategory: (name: string, intoCategory: string) => Promise<void>
   createChildPlace: (parentId: string, name: string, type: PlaceType) => Promise<Place>
   createRootObject: (input: {
     name: string
@@ -529,6 +535,14 @@ export function useKeepIt(): KeepItState {
     },
     deleteSubcategory: async (categoryName, name) => {
       await deleteSubcategory(categoryName, name)
+      await refresh()
+    },
+    moveSubcategory: async (fromCategory, name, toCategory) => {
+      await moveSubcategoryTo(fromCategory, name, toCategory)
+      await refresh()
+    },
+    demoteCategory: async (name, intoCategory) => {
+      await demoteCategory(name, intoCategory)
       await refresh()
     },
     createChildPlace: async (parentId, name, type) => {

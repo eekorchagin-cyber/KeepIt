@@ -91,9 +91,7 @@ export function AssignCodeScreen({ state, code }: { state: KeepItState; code: st
           <span className="muted">
             Сейчас присвоен «{owner}» — при выборе другого владельца он перейдёт к нему.
           </span>
-        ) : (
-          <span className="muted">Выберите вещь или место — потом скан этого кода будет открывать их.</span>
-        )}
+        ) : null}
       </div>
 
       <div className="panel stack">

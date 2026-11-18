@@ -14,6 +14,7 @@ import {
   productLookupSourceLabel,
   type ProductLookupResult,
 } from '../data/productLookup'
+import { suggestStoragePlaces, type StorageHint } from '../data/suggestPlace'
 import { unitForMode, unitOptionsFor } from '../data/units'
 import { ChoosePlaceSheet } from '../components/MoveItemSheet'
 import { ScanCodeSheet } from '../components/ScanCodeSheet'
@@ -126,6 +127,40 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
           )
           .slice(0, 6)
       : []
+
+  /** Куда положить, чтобы похожее лежало рядом: там таких вещей уже больше, чем в выбранном месте */
+  const placeHints =
+    kind === 'item'
+      ? suggestStoragePlaces({
+          name,
+          category,
+          subcategory,
+          currentPlaceId: targetPlaceId,
+          items: state.items,
+          places: state.places,
+        })
+      : []
+
+  const currentObjectKey = place.objectKey
+
+  function hintPlaceLabel(placeId: string): string {
+    const path = state.pathFor(placeId)
+    const sameObject = path[0]?.objectKey === currentObjectKey
+    const visible = path[0]?.type === 'object' && sameObject ? path.slice(1) : path
+    const names = (visible.length > 0 ? visible : path).map((part) => part.name)
+    if (names.length <= 3) return names.join(' / ')
+    return `${names[0]} / … / ${names[names.length - 1]}`
+  }
+
+  function hintReason(hint: StorageHint): string {
+    const extra = hint.count - hint.examples.length
+    const listed = extra > 0 ? `${hint.examples.join(', ')} и ещё ${extra}` : hint.examples.join(', ')
+    if (hint.kind === 'same') {
+      return hint.count > 1 ? `Такая же вещь уже лежит здесь · ${hint.count}` : 'Такая же вещь уже лежит здесь'
+    }
+    if (hint.kind === 'similar') return `Похожее уже лежит здесь: ${listed}`
+    return listed ? `Такая категория уже лежит здесь: ${listed}` : 'Такая категория уже лежит здесь'
+  }
 
   /** Где ещё лежат вещи с таким названием — только для сведения, место новой вещи не меняется */
   function whereStored(entryName: string): string {
@@ -458,6 +493,22 @@ export function AddItemScreen({ state, placeId, code }: { state: KeepItState; pl
                     </span>
                   ) : null}
                   {whereStored(entry.name) ? <span className="muted">Уже есть: {whereStored(entry.name)}</span> : null}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {placeHints.length > 0 ? (
+            <div className="place-suggest">
+              <span className="muted">Положить рядом с похожим</span>
+              {placeHints.map((hint) => (
+                <button
+                  key={`${hint.kind}-${hint.placeId}`}
+                  type="button"
+                  className="place-suggest-row"
+                  onClick={() => setTargetPlaceId(hint.placeId)}
+                >
+                  <span>{hintPlaceLabel(hint.placeId)}</span>
+                  <span className="muted">{hintReason(hint)}</span>
                 </button>
               ))}
             </div>

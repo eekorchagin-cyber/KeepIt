@@ -286,12 +286,7 @@ function InventoryStart({
 
       <div className="panel stack">
         <strong>Инвентаризация «{root.name}»</strong>
-        <p className="muted">
-          Проверяется само место и всё внутри: мест — {route.length}, вещей — {itemCount}. Места идут по порядку
-          вложенности; открывайте их из списка или по QR-метке. У каждой вещи отметьте: на месте, другое количество
-          или нет. Вещи, которых нет в списке, добавляются кнопкой «Нашлась вещь». Изменения запишутся только после
-          «Применить» в итоге.
-        </p>
+        <p className="muted">Мест — {route.length}, вещей — {itemCount}.</p>
         {root.inventoriedAt ? (
           <span className="muted">Прошлая проверка: {formatLentDate(root.inventoriedAt)}</span>
         ) : null}
@@ -759,7 +754,6 @@ function FoundForm({
           <button type="button" disabled={quantity === null} onClick={addNew}>
             Добавить «{name.trim()}» как новую вещь
           </button>
-          <span className="muted">Категорию можно будет назначить потом в разделе «Без категории».</span>
         </>
       ) : null}
 

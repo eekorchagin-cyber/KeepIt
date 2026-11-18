@@ -3,7 +3,6 @@ import type { KeepItState } from '../hooks/useKeepIt'
 import { ChoiceSelect } from './ChoiceSelect'
 import {
   SERVICE_INTERVALS,
-  SERVICE_SOON_DAYS,
   addMonths,
   formatIsoDate,
   intervalLabel,
@@ -116,12 +115,6 @@ export function ServicePanel({ state, item }: { state: KeepItState; item: Item }
           Изменить даты
         </button>
       </div>
-      {interval0 === 0 ? (
-        <p className="muted">
-          Без интервала следующую дату после ТО нужно указать вручную — или задайте периодичность в «Изменить
-          даты».
-        </p>
-      ) : null}
 
       {editing ? (
         <div className="sheet-backdrop" onClick={() => setEditing(false)} role="presentation">
@@ -153,10 +146,6 @@ export function ServicePanel({ state, item }: { state: KeepItState; item: Item }
                 Следующее ТО
                 <input type="date" value={nextAt} onChange={(e) => setNextAt(e.target.value)} />
               </label>
-              <p className="muted">
-                По дате следующего ТО программа напомнит заранее — за {SERVICE_SOON_DAYS} дней — в разделе
-                «Напоминания».
-              </p>
               {error ? <p className="error">{error}</p> : null}
               <button type="button" disabled={busy} onClick={() => void save()}>
                 Сохранить

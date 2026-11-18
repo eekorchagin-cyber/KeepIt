@@ -26,10 +26,6 @@ export function CategorizeScreen({ state, placeId }: { state: KeepItState; place
           Без категории: {items.length}
           {place && scope === 'place' ? ` · ${place.name}` : ''}
         </strong>
-        <p className="muted">
-          У каждой вещи: «Принять» подсказку, «Выбрать категорию» из справочника или «Удалить»
-          неверно распознанную. Выбор запоминается и подсказывается в следующий раз.
-        </p>
         {place ? (
           <div className="split-row">
             <button
@@ -308,9 +304,7 @@ function CategorizeList({ state, items }: { state: KeepItState; items: Item[] })
               </button>
             </div>
           </>
-        ) : (
-          <p className="muted">Галочки — для действий сразу с несколькими вещами</p>
-        )}
+        ) : null}
         {message ? <p className="muted">{message}</p> : null}
         {error ? <p className="error">{error}</p> : null}
       </div>

@@ -1,5 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { onAddPlaceRequest, onMovePlaceRequest } from '../data/uiEvents'
+import { copyLabelLink, publishLabelLinkNote } from '../data/labelProgram'
+import { itemUrl, placeUrl } from '../data/placeCodes'
 import { ChoiceSelect } from './ChoiceSelect'
 import { DataExchange } from './DataExchange'
 import { MoveItemSheet, MovePlaceSheet } from './MoveItemSheet'
@@ -254,7 +256,16 @@ export function TopBar({ state }: { state: KeepItState }) {
       {sheet === 'help' ? (
         <PageFrame title={hint ? 'Подсказка' : `Справка: ${help.title}`} onClose={closeSheet}>
           <div className="panel stack">
-            <p className="help-text">{hint ?? help.body}</p>
+            {hint ? (
+              <p className="help-text">{hint}</p>
+            ) : (
+              (help.blocks ?? [{ text: help.body }]).map((block) => (
+                <section key={block.heading ?? block.text} className="help-block">
+                  {block.heading ? <h2>{block.heading}</h2> : null}
+                  <p className="help-text">{block.text}</p>
+                </section>
+              ))
+            )}
           </div>
         </PageFrame>
       ) : null}
@@ -587,7 +598,7 @@ function AppMenuLinks({ state, onClose }: { state: KeepItState; onClose: () => v
   const links: Array<{ screen: Screen; title: string; hint: string; badge?: number }> = [
     { screen: { name: 'reminders' }, title: 'Напоминания', hint: 'Техническое обслуживание оборудования', badge: dueCount },
     { screen: { name: 'categories' }, title: 'Справочник категорий', hint: 'Категории и подкатегории' },
-    { screen: { name: 'settings' }, title: 'Настройки', hint: 'Тема и уведомления' },
+    { screen: { name: 'settings' }, title: 'Настройки', hint: 'Тема, звук и программа печати меток' },
     { screen: { name: 'about' }, title: 'О программе', hint: 'Версия, обновления, разработчик' },
   ]
   return (
@@ -663,6 +674,20 @@ function MenuActions({
         >
           <strong>Печать меток объекта</strong>
         </button>
+        <button
+          type="button"
+          className="list-item"
+          onClick={() => {
+            const root = state.places.find(
+              (place) => place.type === 'object' && place.objectKey === objectKey,
+            )
+            if (!root) return
+            publishLabelLinkNote(copyLabelLink(placeUrl(root.id)))
+            onClose()
+          }}
+        >
+          <strong>Скопировать ссылку</strong>
+        </button>
       </>
     )
   }
@@ -710,6 +735,16 @@ function MenuActions({
         >
           <strong>Печать метки</strong>
         </button>
+        <button
+          type="button"
+          className="list-item"
+          onClick={() => {
+            publishLabelLinkNote(copyLabelLink(placeUrl(placeId)))
+            onClose()
+          }}
+        >
+          <strong>Скопировать ссылку</strong>
+        </button>
       </>
     )
   }
@@ -737,6 +772,17 @@ function MenuActions({
           }}
         >
           <strong>{item?.needsFill ? 'Заполнить карточку' : 'Изменить карточку'}</strong>
+        </button>
+        <button
+          type="button"
+          className="list-item"
+          onClick={() => {
+            if (!item) return
+            publishLabelLinkNote(copyLabelLink(itemUrl(item.id)))
+            onClose()
+          }}
+        >
+          <strong>Скопировать ссылку</strong>
         </button>
       </>
     )

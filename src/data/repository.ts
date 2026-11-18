@@ -3,13 +3,20 @@ import type {
   AppSettings,
   CategoryNode,
   Item,
+  ItemName,
   ObjectKey,
   Place,
   PlaceType,
   StockMove,
   UnitCode,
 } from '../types'
-import { cloneCategoryTree, normalizeCategoryName } from './categories'
+import {
+  cloneCategoryTree,
+  normalizeCategoryName,
+  planDemoteCategory,
+  planMoveSubcategory,
+  type CategoryPlacement,
+} from './categories'
 import { db } from './db'
 import { newId, nowIso } from './ids'
 import {
@@ -329,6 +336,50 @@ async function rewriteItemCategories(
   if (updates.length) await db.items.bulkPut(updates)
 }
 
+/** Меняет категорию у вещей и в справочнике названий. null — запись не трогать. */
+async function shiftCategoryPlacements(
+  nextOf: (category: string, subcategory: string) => CategoryPlacement | null,
+): Promise<void> {
+  const at = nowIso()
+  const items = await db.items.toArray()
+  const itemUpdates: Item[] = []
+  for (const item of items) {
+    const next = nextOf(item.category, item.subcategory)
+    if (!next || (next.category === item.category && next.subcategory === item.subcategory)) continue
+    itemUpdates.push({
+      ...item,
+      category: next.category,
+      subcategory: next.subcategory,
+      version: item.version + 1,
+      updatedAt: at,
+      syncStatus: 'pending',
+    })
+  }
+  if (itemUpdates.length) await db.items.bulkPut(itemUpdates)
+
+  const names = await db.itemNames.toArray()
+  const nameUpdates: ItemName[] = []
+  for (const entry of names) {
+    const next = nextOf(entry.category, entry.subcategory)
+    if (!next || (next.category === entry.category && next.subcategory === entry.subcategory)) continue
+    nameUpdates.push({ ...entry, category: next.category, subcategory: next.subcategory, updatedAt: at })
+  }
+  if (nameUpdates.length) await db.itemNames.bulkPut(nameUpdates)
+}
+
+async function commitCategoryTree(
+  tree: CategoryNode[],
+  shift: (category: string, subcategory: string) => CategoryPlacement | null,
+): Promise<AppSettings> {
+  await db.transaction('rw', db.items, db.itemNames, db.settings, async () => {
+    await shiftCategoryPlacements(shift)
+    const current = await db.settings.get('settings')
+    if (!current) throw new Error('Настройки не найдены')
+    await db.settings.put(normalizeSettings({ ...current, categories: tree }))
+  })
+  return getSettings()
+}
+
 export async function addCategory(name: string): Promise<AppSettings> {
   const trimmed = name.trim()
   if (!trimmed) throw new Error('Укажите название категории')
@@ -455,6 +506,53 @@ export async function deleteSubcategory(categoryName: string, name: string): Pro
     (child) => normalizeCategoryName(child) !== normalizeCategoryName(name),
   )
   return saveCategoryTree(tree)
+}
+
+/** Подкатегории, которые уже стоят на вещах и в справочнике названий этой категории. */
+async function assignedSubcategories(categoryName: string): Promise<string[]> {
+  const [items, names] = await Promise.all([db.items.toArray(), db.itemNames.toArray()])
+  const key = normalizeCategoryName(categoryName)
+  return [...items, ...names]
+    .filter((entry) => normalizeCategoryName(entry.category) === key && entry.subcategory.trim())
+    .map((entry) => entry.subcategory)
+}
+
+/** Подкатегория переходит в другую категорию вместе с вещами: подкатегория у вещи не сбрасывается. */
+export async function moveSubcategoryTo(
+  fromCategory: string,
+  subcategory: string,
+  toCategory: string,
+): Promise<AppSettings> {
+  const settings = await getSettings()
+  const plan = planMoveSubcategory(settings.categories, fromCategory, subcategory, toCategory)
+  return commitCategoryTree(plan.tree, (category, sub) => {
+    if (normalizeCategoryName(category) !== normalizeCategoryName(plan.from.category)) return null
+    if (normalizeCategoryName(sub) !== normalizeCategoryName(plan.from.subcategory)) return null
+    return plan.to
+  })
+}
+
+/**
+ * Категория становится подкатегорией другой.
+ * У вещей с уже указанной подкатегорией она остаётся; пустая заполняется названием бывшей категории.
+ */
+export async function demoteCategory(category: string, intoCategory: string): Promise<AppSettings> {
+  const settings = await getSettings()
+  const plan = planDemoteCategory(
+    settings.categories,
+    category,
+    intoCategory,
+    await assignedSubcategories(category),
+  )
+  return commitCategoryTree(plan.tree, (categoryName, sub) => {
+    if (normalizeCategoryName(categoryName) !== normalizeCategoryName(plan.fromCategory)) return null
+    const trimmed = sub.trim()
+    if (!trimmed) return { category: plan.toCategory, subcategory: plan.bareSubcategory }
+    const kept = plan.kept.find(
+      (row) => normalizeCategoryName(row.from) === normalizeCategoryName(trimmed),
+    )
+    return { category: plan.toCategory, subcategory: kept?.to ?? trimmed }
+  })
 }
 
 export async function listPlaces(objectKey?: ObjectKey): Promise<Place[]> {

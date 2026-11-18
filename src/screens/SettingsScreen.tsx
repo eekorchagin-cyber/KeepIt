@@ -8,6 +8,18 @@ import {
   type NotifyStatus,
 } from '../data/updateNotifications'
 import { playScanSound, scanSoundLevel, setScanSoundLevel, type ScanSoundLevel } from '../data/scanSound'
+import {
+  customUrlError,
+  openLabelProgram,
+  readLabelCustomUrl,
+  readLabelProgram,
+  readLabelProgramKind,
+  readLabelShortcutName,
+  setLabelCustomUrl,
+  setLabelProgramKind,
+  setLabelShortcutName,
+  type LabelProgramKind,
+} from '../data/labelProgram'
 import type { ThemeMode } from '../types'
 
 const NOTIFY_TEXT: Record<NotifyStatus, string> = {
@@ -20,10 +32,26 @@ const NOTIFY_TEXT: Record<NotifyStatus, string> = {
   unsupported: 'Этот браузер не поддерживает уведомления. Новая версия появится плашкой внутри программы.',
 }
 
+const PROGRAM_HINT: Record<LabelProgramKind, string> = {
+  off: '«Скопировать ссылку» копирует ссылку метки. Вставьте её в программу печати сами.',
+  niimbot:
+    'После «Скопировать ссылку» откроется NIIMBOT — вставьте ссылку в QR-код метки. Если программа не открылась, выберите «Команда на iPhone» или «Свой адрес».',
+  aiyin:
+    'После «Скопировать ссылку» откроется AiYin — вставьте ссылку в QR-код метки. Если программа не открылась, выберите «Команда на iPhone» или «Свой адрес».',
+  shortcut:
+    'В приложении «Команды» создайте команду с действием «Открыть программу» и напишите здесь её имя. После «Скопировать ссылку» KeepIt откроет эту команду.',
+  custom:
+    'Адрес, по которому телефон открывает программу, например niimbot://. После «Скопировать ссылку» KeepIt перейдёт по этому адресу.',
+}
+
 export function SettingsScreen({ state }: { state: KeepItState }) {
   const [status, setStatus] = useState<NotifyStatus>(() => notifyStatus())
   const [busy, setBusy] = useState(false)
   const [soundLevel, setSoundLevel] = useState<ScanSoundLevel>(scanSoundLevel)
+  const [programKind, setProgramKind] = useState<LabelProgramKind>(readLabelProgramKind)
+  const [shortcutName, setShortcutName] = useState(readLabelShortcutName)
+  const [customUrl, setCustomUrl] = useState(readLabelCustomUrl)
+  const [programNote, setProgramNote] = useState<string | null>(null)
 
   async function toggleNotifications() {
     setBusy(true)
@@ -71,10 +99,85 @@ export function SettingsScreen({ state }: { state: KeepItState }) {
           />
         </label>
 
-        <p className="muted">
-          Сейчас всё хранится локально в браузере этого устройства. Семья и Supabase подключим после отработки
-          основных сценариев.
-        </p>
+        <label className="field">
+          Программа для печати меток
+          <ChoiceSelect<LabelProgramKind>
+            title="Программа для печати меток"
+            value={programKind}
+            options={[
+              { value: 'off', label: 'Не открывать', hint: 'Только копировать ссылку' },
+              { value: 'niimbot', label: 'NIIMBOT', hint: 'Приложение принтера NIIMBOT' },
+              { value: 'aiyin', label: 'AiYin', hint: 'Приложение принтера AiYin' },
+              {
+                value: 'shortcut',
+                label: 'Команда на iPhone',
+                hint: 'Команда «Команды», которая открывает нужную программу',
+              },
+              { value: 'custom', label: 'Свой адрес', hint: 'Адрес, по которому открывается программа' },
+            ]}
+            onChange={(kind) => {
+              setLabelProgramKind(kind)
+              setProgramKind(kind)
+              setProgramNote(null)
+            }}
+          />
+        </label>
+        <p className="muted">{PROGRAM_HINT[programKind]}</p>
+        {programKind === 'shortcut' ? (
+          <label className="field">
+            Имя команды
+            <input
+              value={shortcutName}
+              placeholder="Например, Печать метки"
+              onChange={(event) => {
+                setLabelShortcutName(event.target.value)
+                setShortcutName(event.target.value)
+                setProgramNote(null)
+              }}
+            />
+          </label>
+        ) : null}
+        {programKind === 'custom' ? (
+          <label className="field">
+            Адрес программы
+            <input
+              value={customUrl}
+              placeholder="niimbot://"
+              inputMode="url"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              onChange={(event) => {
+                setLabelCustomUrl(event.target.value)
+                setCustomUrl(event.target.value)
+                setProgramNote(null)
+              }}
+            />
+          </label>
+        ) : null}
+        {programKind !== 'off' ? (
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              const program = readLabelProgram()
+              if (!program.url) {
+                setProgramNote(
+                  program.kind === 'custom'
+                    ? (customUrlError(customUrl) ?? 'Напишите адрес программы.')
+                    : 'Напишите имя команды — без него программу не открыть.',
+                )
+                return
+              }
+              openLabelProgram()
+              setProgramNote(`Пробую открыть «${program.name}». Если ничего не произошло, укажите другой адрес или команду.`)
+            }}
+          >
+            Проверить открытие
+          </button>
+        ) : null}
+        {programNote ? <p className="muted">{programNote}</p> : null}
+
       </div>
 
       <div className="panel stack">

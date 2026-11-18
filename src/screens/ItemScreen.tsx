@@ -379,9 +379,7 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
               </button>
             </div>
             <div className="stack">
-              <p className="muted">
-                Вещь останется привязана к месту возврата «{placePath}». Отметьте, у кого искать.
-              </p>
+              <p className="muted">Место возврата: {placePath}</p>
               <label className="field">
                 Кому / у кого искать
                 <input
@@ -419,11 +417,6 @@ export function ItemScreen({ state, itemId }: { state: KeepItState; itemId: stri
               </button>
             </div>
             <div className="stack">
-              <p className="muted">
-                Вместо вещи «{item.name}» в «{place?.name ?? 'месте'}» появится место хранения — в него можно
-                класть вещи и печатать для него метку. Сама вещь будет удалена из учёта.
-                {item.quantity > 1 ? ` Было ${formatQty(item.quantity, item.unit)} — создаётся одно место.` : ''}
-              </p>
               <label className="field">
                 Название места
                 <input value={placeName} onChange={(e) => setPlaceName(e.target.value)} autoFocus />
