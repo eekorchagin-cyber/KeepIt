@@ -351,7 +351,7 @@ export function PlaceScreen({ state, placeId }: { state: KeepItState; placeId: s
                         mode={item.mode}
                         category={item.category}
                         subcategory={item.subcategory}
-                        suffix={item.needsFill ? ' · заполнить' : isItemLent(item) ? ` · у ${item.lentTo}` : ''}
+                        suffix={item.needsFill ? ' · заполнить' : ''}
                       />
                     </span>
                   </span>

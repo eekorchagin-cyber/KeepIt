@@ -725,10 +725,17 @@ label {
 }
 
 .mode-category {
-  display: inline-flex;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   min-width: 0;
+  max-width: 100%;
+}
+
+.mode-category > span {
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 
 .mode-icon {
@@ -844,7 +851,7 @@ label {
 
 .list-item {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
   width: 100%;
@@ -854,6 +861,10 @@ label {
   border: 1px solid var(--line);
   padding: 10px 12px;
   overflow: hidden;
+}
+
+.list-item > :first-child {
+  min-width: 0;
 }
 
 .list-item.catalog-row {
@@ -989,13 +1000,17 @@ label {
 .badge {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: 28px;
-  padding: 0 10px;
+  max-width: 9.5rem;
+  padding: 4px 10px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent);
   font-size: 0.75em;
-  white-space: nowrap;
+  line-height: 1.25;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .badge.warn {
